@@ -444,8 +444,8 @@ results/alternatives/0/confidence,results/alternatives/0/transcript,results/alte
 0.76830864,,0.91283858,105.8,105.7,to,2,en-us,106.921907
 0.76830864,,0.6993891,106.2,105.8,accept,2,en-us,106.921907
 0.76830864,,0.56540132,106.5,106.2,it,2,en-us,106.921907
-,,,,,,,en-us,110.139186
-,,,,,,,en-us,110.289525
+,,,,,,2,en-us,110.139186
+,,,,,,2,en-us,110.289525
 0.91283858, yeah,0.91283858,114.4,114,yeah,1,en-us,115.350977
 0.78123373, so overall I like against this accepting the refugees currently in Jeju largely because a lot of the population is not agreeing to it or accepting it already seven hundred thousand people signed a petition to the blue house against accepting the refugees and,0.91283858,117,116.1,so,1,en-us,139.395376
 0.78123373,,0.91283858,119.2,118.6,overall,1,en-us,139.395376
@@ -827,11 +827,11 @@ results/alternatives/0/confidence,results/alternatives/0/transcript,results/alte
 0.68227839,,0.48801452,202.5,202.4,the,1,en-us,203.640729
 0.68227839,,0.74471462,202.8,202.5,country,1,en-us,203.640729
 0.68227839,,0.58034515,203.3,202.8,already,1,en-us,203.640729
-,,,,,,,en-us,206.056193
-,,,,,,,en-us,206.126351
-,,,,,,,en-us,208.201046
-,,,,,,,en-us,210.285763
-,,,,,,,en-us,210.385988
+,,,,,,1,en-us,206.056193
+,,,,,,1,en-us,206.126351
+,,,,,,1,en-us,208.201046
+,,,,,,1,en-us,210.285763
+,,,,,,1,en-us,210.385988
 0.73972797, first of all you mentioned that s okay so well you mentioned that a lot of Korean citizens are against it and as a as an Evidence you showed the petition that number of the petitioners in foreign against these refugees but I believe this issue is not really a democratic issue that can be decided upon the popular Theory,0.91283858,214,213.6,first,2,en-us,241.015286
 0.73972797,,0.91283858,214.1,214,of,2,en-us,241.015286
 0.73972797,,0.91283858,214.4,214.1,all,2,en-us,241.015286
@@ -1379,7 +1379,7 @@ results/alternatives/0/confidence,results/alternatives/0/transcript,results/alte
 0.80292648,,0.53458065,349.7,349.3,and,2,en-us,350.703452
 0.80292648,,0.81141919,350.3,350,what,2,en-us,350.703452
 0.80292648,,0.68474209,350.5,350.3,we,2,en-us,350.703452
-0.75582045, you also mentioned about the responsibility that the South Korea doesn't hold the responsibility to take care of this refugees but well let's go back to the refugee convention and we do have a responsibility for that right so repeatedly you mentioned the law the the agreement that Korea has signed impact in 1994 which is more than 20 years ago and what we,0.91283858,321.5,321.3,you,1 and 2,en-us,350.713473
+0.75582045, you also mentioned about the responsibility that the South Korea doesn't hold the responsibility to take care of this refugees but well let's go back to the refugee convention and we do have a responsibility for that right so repeatedly you mentioned the law the the agreement that Korea has signed impact in 1994 which is more than 20 years ago and what we,0.91283858,321.5,321.3,you,2,en-us,350.713473
 0.75582045,,0.91283858,321.7,321.5,also,2,en-us,350.713473
 0.75582045,,0.91283858,322,321.7,mentioned,2,en-us,350.713473
 0.75582045,,0.91283858,322.2,322,about,2,en-us,350.713473
@@ -1823,10 +1823,10 @@ results/alternatives/0/confidence,results/alternatives/0/transcript,results/alte
 0.89463431,,0.91283858,431.1,430.8,safe,1,en-us,435.805992
 0.89463431,,0.91283858,431.4,431.1,family,1,en-us,435.805992
 0.89463431,,0.9122954,431.8,431.4,life,1,en-us,435.805992
-,,,,,,,en-us,440.877466
-,,,,,,,en-us,440.957646
-,,,,,,,en-us,444.585854
-,,,,,,,en-us,444.656015
+,,,,,,1,en-us,440.877466
+,,,,,,1,en-us,440.957646
+,,,,,,1,en-us,444.585854
+,,,,,,1,en-us,444.656015
 0.88194615, all right so well yeah I do agree we do in in a sense that since we have already signed their confession the government holds the responsibility to educate at least people about these conventions and are the country's responsibility International Society about refugees yeah I mean because because government lacks that I think that this kind of problem happens inside,0.76145279,448,447.9,all,2,en-us,477.400098
 0.88194615,,0.76145267,448.3,448,right,2,en-us,477.400098
 0.88194615,,0.84002864,448.8,448.3,so,2,en-us,477.400098
@@ -2250,10 +2250,10 @@ results/alternatives/0/confidence,results/alternatives/0/transcript,results/alte
 0.7942012,,0.91283858,540.9,540.8,in,2,en-us,542.036335
 0.7942012,,0.76193017,541.2,540.9,South,2,en-us,542.036335
 0.7942012,,0.74633598,541.6,541.2,Korea,2,en-us,542.036335
-,,,,,,,en-us,543.229031
-,,,,,,,en-us,543.289169
-,,,,,,,en-us,544.712389
-0.91283858, so once again the,0.91283858,550.3,550,so,1,en-us,553.822999
+,,,,,,2,en-us,543.229031
+,,,,,,2,en-us,543.289169
+,,,,,,2,en-us,544.712389
+0.91283858, so once again the,0.91283858,550.3,550,so,2,en-us,553.822999
 0.91283858,,0.91283858,550.8,550.6,once,1,en-us,553.822999
 0.91283858,,0.91283858,551.3,550.8,again,1,en-us,553.822999
 0.91283858,,0.91283858,553.3,552.7,the,1,en-us,553.822999
@@ -3103,8 +3103,8 @@ results/alternatives/0/confidence,results/alternatives/0/transcript,results/alte
 0.79039592,,0.67863637,752.3,752.1,and,2,en-us,755.449173
 0.79039592,,0.84219337,752.8,752.3,fair,2,en-us,755.449173
 0.79039592,,0.7216723,753.7,752.8,processes,2,en-us,755.449173
-,,,,,,,en-us,756.621823
-,,,,,,,en-us,756.661917
+,,,,,,1,en-us,756.621823
+,,,,,,1,en-us,756.661917
 0.87621617, all right overall once again I want to repeat that I'm against accepting the refugees currently in Jeju for entering America and although the Korea Korea has signed a petition the agreement to accept refugees in the past but the nation itself decides how much how many people enter the country and it has done a very well good job mate,0.91283858,760.4,760.4,all,1,en-us,790.05747
 0.87621617,,0.91283858,760.7,760.4,right,1,en-us,790.05747
 0.87621617,,0.90101039,763,762.3,overall,1,en-us,790.05747
@@ -3443,12 +3443,12 @@ results/alternatives/0/confidence,results/alternatives/0/transcript,results/alte
 0.9128387,,0.91283858,846.7,846.5,to,1,en-us,848.148902
 0.9128387,,0.91283858,847.6,846.7,Unlimited,1,en-us,848.148902
 ,,,,,,1,en-us,850.644545
-0.77445012, okay experience is over now,0.69130957,850.1,849.8,okay,0,en-us,853.9821
-0.77445012,,0.91283858,851.6,851.2,experience,0,en-us,853.9821
-0.77445012,,0.64061141,851.9,851.6,is,0,en-us,853.9821
-0.77445012,,0.90258783,852.4,852,over,0,en-us,853.9821
-0.77445012,,0.72490323,852.7,852.4,now,0,en-us,853.9821
-0.4819783, Sprint is over now,0.36256883,851.6,851.5,Sprint,0,en-us,854.002141
-0.4819783,,0.62841922,852,851.6,is,0,en-us,854.002141
-0.4819783,,0.58046883,852.4,852.1,over,0,en-us,854.002141
-0.4819783,,0.35645634,852.6,852.4,now,0,en-us,854.002141
+0.77445012, okay experience is over now,0.69130957,850.1,849.8,okay,1,en-us,853.9821
+0.77445012,,0.91283858,851.6,851.2,experience,1,en-us,853.9821
+0.77445012,,0.64061141,851.9,851.6,is,1,en-us,853.9821
+0.77445012,,0.90258783,852.4,852,over,1,en-us,853.9821
+0.77445012,,0.72490323,852.7,852.4,now,1,en-us,853.9821
+0.4819783, Sprint is over now,0.36256883,851.6,851.5,Sprint,1,en-us,854.002141
+0.4819783,,0.62841922,852,851.6,is,1,en-us,854.002141
+0.4819783,,0.58046883,852.4,852.1,over,1,en-us,854.002141
+0.4819783,,0.35645634,852.6,852.4,now,1,en-us,854.002141
