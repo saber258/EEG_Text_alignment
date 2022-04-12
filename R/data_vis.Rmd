@@ -99,3 +99,61 @@ p1_eeg_delta
 p1_eeg_theta
 ```
 
+```{r}
+p1_self_emotions <- read_csv(here::here("emotion_annotations/self_annotations/P1.self.csv"))
+```
+```{r}
+p1_self_emotions_test <- tibble(seconds, arousal, valence,cheerful,happy,angry,nervous,sad) 
+p1_self_emotions_test |>   
+  pivot_longer(cols=c(arousal,valence,cheerful,happy,angry,nervous,sad),
+               names_to = 'Sentiments') |> 
+  ggplot(aes(x=seconds, y = value,
+             col = Sentiments,
+             group = Sentiments))+
+  geom_lin() + 
+  geom_point()
+  
+```
+```{r}
+p1_self_emotions |> 
+  select('seconds', 'arousal', 'valence', 'cheerful','happy','angry','nervous','sad') |> 
+  pivot_longer(-seconds, names_to = 'variable', values_to = 'value') |> 
+  ggplot(aes(seconds,  value, colour = variable))+
+  geom_line()
+```
+```{r}
+ggp, aes(mpg, value, colour = variable)) + geom_line()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
