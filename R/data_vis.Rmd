@@ -11,18 +11,91 @@ library(lubridate)
 library(tidyverse)
 library(ggpubr)
 library(rvest)
+library(readr)
+```
+
+```{r}
+setwd('/Users/williamhan/Desktop/GitHub/CMUSAIL')
+```
+```{r}
+print(getwd())
 ```
 
 
 
 ```{r}
-p1_eeg <- readr::read_csv(here::here("neurosky_polar_data/1/BrainWave.csv"))
+p1_eeg <- read_csv(here::here("neurosky_polar_data/1/BrainWave.csv"))
 ```
 
 ```{r}
-p1_eeg |> 
+p1_eeg_delta <- p1_eeg|> 
   ggplot(aes(x = timestamp,
              y = delta)) +
   geom_line(color = "#E46726")
+
+p1_eeg_lowalpha <- p1_eeg|> 
+  ggplot(aes(x = timestamp,
+             y = lowAlpha)) +
+  geom_line(color = "#E46726")
+
+p1_eeg_highalpha <- p1_eeg|> 
+  ggplot(aes(x = timestamp,
+             y = highAlpha)) +
+  geom_line(color = "#E46726")
+
+p1_eeg_lowbeta <- p1_eeg|> 
+  ggplot(aes(x = timestamp,
+             y = lowBeta)) +
+  geom_line(color = "#E46726")
+
+p1_eeg_highbeta <- p1_eeg|> 
+  ggplot(aes(x = timestamp,
+             y = highBeta)) +
+  geom_line(color = "#E46726")
+
+p1_eeg_lowgamma <- p1_eeg|> 
+  ggplot(aes(x = timestamp,
+             y = lowGamma)) +
+  geom_line(color = "#E46726")
+
+p1_eeg_middlegamma <- p1_eeg|> 
+  ggplot(aes(x = timestamp,
+             y = middleGamma)) +
+  geom_line(color = "#E46726")
+
+p1_eeg_theta <- p1_eeg|> 
+  ggplot(aes(x = timestamp,
+             y = theta)) +
+  geom_line(color = "#E46726")
+```
+
+```{r}
+ggarrange(p1_eeg_lowalpha, p1_eeg_highalpha
+          + rremove("x.text"), 
+          ncol = 2, nrow = 1)
+```
+
+```{r}
+ggarrange(p1_eeg_lowbeta, p1_eeg_highbeta
+          + rremove("x.text"), 
+          ncol = 2, nrow = 1)
+```
+
+
+```{r}
+ggarrange(p1_eeg_lowgamma, p1_eeg_middlegamma
+          + rremove("x.text"), 
+          ncol = 2, nrow = 1)
+```
+
+
+```{r}
+p1_eeg_delta
+```
+
+
+
+```{r}
+p1_eeg_theta
 ```
 
