@@ -26,12 +26,12 @@ import os
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
-FL = FocalLoss(class_num=5, gamma=1.5, average=False)
+FL = FocalLoss(class_num=3, gamma=1.5, average=False)
 
 
 def cal_loss(pred, label, device):
 
-    cnt_per_class = np.zeros(5)
+    cnt_per_class = np.zeros(3)
 
     loss = F.cross_entropy(pred, label, reduction='sum')
     pred = pred.max(1)[1]
