@@ -16,7 +16,7 @@ from optim_new import ScheduledOptim
 from dataset_new import SignalDataset
 from config import *
 from FocalLoss import FocalLoss
-from entropy import *
+#from entropy import *
 from sklearn.model_selection import train_test_split, KFold
 import matplotlib.pyplot as plt
 from roc_new import plot_roc
