@@ -26,4 +26,4 @@ if __name__ == '__main__':
                                tokenizer = tokenizer,
                                max_len = MAX_LEN)
 
-    print(Multimodal_dataset[:]['eeg', 'input_ids'])
+    print(Multimodal_dataset
