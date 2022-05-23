@@ -24,3 +24,4 @@ class SignalDataset(Dataset):
 
     def __getitem__(self, idx):
         return self._signal[idx], self._label[idx]
+
