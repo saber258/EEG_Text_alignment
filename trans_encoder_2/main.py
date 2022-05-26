@@ -74,6 +74,8 @@ def train_epoch(train_loader, device, model, optimizer, total_num):
         sig, label, = map(lambda x: x.to(device), batch)
         optimizer.zero_grad()
         pred = model(sig)
+        print(pred.shape)
+        print(sig.shape)
         all_labels.extend(label.cpu().numpy())
         all_res.extend(pred.max(1)[1].cpu().numpy())
         loss, n_correct, cnt = cal_loss(pred, label, device)
