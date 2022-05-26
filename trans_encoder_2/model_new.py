@@ -49,7 +49,7 @@ class Transformer(nn.Module):
             self, device,
             d_feature, d_model=512, d_inner=2048,
             n_layers=6, n_head=8, d_k=64, d_v=64, dropout=0.1,
-            class_num=3):
+            class_num=5):
 
         super().__init__()
 

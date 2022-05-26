@@ -68,4 +68,6 @@ if __name__ == '__main__':
                                  num_workers=4,
                                  shuffle=True)
 
-    print(train_data[0])
+    for batch in tqdm(train_loader):
+        print(batch[0].shape)
+        break

@@ -26,12 +26,12 @@ import os
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
-FL = FocalLoss(class_num=3, gamma=1.5, average=False)
+FL = FocalLoss(class_num=5, gamma=1.5, average=False)
 
 
 def cal_loss(pred, label, device):
 
-    cnt_per_class = np.zeros(3)
+    cnt_per_class = np.zeros(5)
 
     loss = F.cross_entropy(pred, label, reduction='sum')
     pred = pred.max(1)[1]
@@ -167,17 +167,18 @@ if __name__ == '__main__':
     test_file = 'test_all.csv'
     raw_train = pd.read_csv(train_file, header=None).values
     raw_test = pd.read_csv(test_file, header=None).values
-    whole_data = raw_train 
+    raw_test = raw_test[0:100]
+    whole_data = raw_train[0:200] 
 
 
-    for r in range(10):
+    for r in range(1):
         time_start_i = time.time()
         raw_train, raw_valid, _, _ = train_test_split(whole_data, list(whole_data[:, 0]), test_size=0.3,
-                                                          random_state=r,stratify=list(whole_data[:, 0]))
+                                                          random_state=r)#,stratify=list(whole_data[:, 0]))
         print("raw_train shape", raw_train.shape)
         print("raw_valid shape", raw_valid.shape)
         _, raw_test, _, _ = train_test_split(raw_test, list(raw_test[:, 0]), test_size=0.99,
-                                                     random_state=r,stratify=list(raw_test[:, 0]))
+                                                     random_state=r)#,stratify=list(raw_test[:, 0]))
 
 
         print("raw_valid shape", raw_valid.shape)
