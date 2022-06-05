@@ -393,7 +393,7 @@ if __name__ == '__main__':
                 'epoch': epoch_i}
 
 
-            if valid_losses <= min(valid_losses):
+            if valid_loss <= min(valid_losses):
                 torch.save(checkpoint, str(r)+model_name)
     
                 print('    - [Info] The checkpoint file has been updated.')
