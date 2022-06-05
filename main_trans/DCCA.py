@@ -25,6 +25,7 @@ import time
 import os
 from transformers import AutoTokenizer
 from imblearn.over_sampling import RandomOverSampler
+from CCA import cca_loss, DeepCCA
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
@@ -32,11 +33,12 @@ FL = FocalLoss(class_num=2, gamma=1.5, average=False)
 tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 
+
 def cal_loss(pred, label, device):
 
     cnt_per_class = np.zeros(2)
 
-    loss = F.cross_entropy(pred, label, reduction='sum')
+    # loss = 
     pred = pred.max(1)[1]
     n_correct = pred.eq(label).sum().item()
     cnt_per_class = [cnt_per_class[j] + pred.eq(j).sum().item() for j in range(class_num)]
@@ -90,16 +92,17 @@ def train_epoch(train_loader1, train_loader2, device, model, optimizer, total_nu
 
       
       optimizer.zero_grad()
-      pred1 = model(sig1, sig2)
-      all_labels.extend(label1.cpu().numpy())
-      all_res.extend(pred1.max(1)[1].cpu().numpy())
-      loss, n_correct1, cnt1 = cal_loss(pred1, label1, device)
+      pred1, pred2 = model(sig1, sig2)
+      # all_labels.extend(label1.cpu().numpy())
+      # all_res.extend(pred1.max(1)[1].cpu().numpy())
+      # loss, n_correct1, cnt1 = cal_loss(pred1, label1, device)
       
-    
+      loss = model.loss
+      loss = loss(pred1, pred2)
       loss.backward()
       optimizer.step_and_update_lr()
       total_loss += loss.item()
-      total_correct += (n_correct1)
+      # total_correct += (n_correct1)
   
     #cnt_per_class += (cnt1 + cnt2)
   
@@ -107,9 +110,9 @@ def train_epoch(train_loader1, train_loader2, device, model, optimizer, total_nu
       
 
     train_loss = total_loss / (total_num + total_num2)
-    train_acc = total_correct / (total_num + total_num2)
+    # train_acc = total_correct / (total_num + total_num2)
 
-    return train_loss, train_acc, cm #cnt_per_class, cm
+    return train_loss#, train_acc, cm #cnt_per_class, cm
 
 
 def eval_epoch(valid_loader1, valid_loader2, device, model, total_num, total_num2):
@@ -136,25 +139,28 @@ def eval_epoch(valid_loader1, valid_loader2, device, model, total_num, total_num
           sig1, label1 = map(lambda x: x.to(device), data2)
           sig2, _ = map(lambda x: x.to(device), data1)
         
-          pred1 = model(sig1, sig2)
-          all_labels.extend(label1.cpu().numpy())
-          all_res.extend(pred1.max(1)[1].cpu().numpy())
-          loss, n_correct1, cnt1 = cal_loss(pred1, label1, device)
+          pred1, pred2 = model(sig1, sig2)
+          # all_labels.extend(label1.cpu().numpy())
+          # all_res.extend(pred1.max(1)[1].cpu().numpy())
+          # loss, n_correct1, cnt1 = cal_loss(pred1, label1, device)
+
+          loss = model.loss
+          loss = loss(pred1, pred2)
       
           
    
           total_loss += loss.item()
-          total_correct += (n_correct1)
+          # total_correct += (n_correct1)
 
-    cm = confusion_matrix(all_labels, all_res)
-    acc_SP, pre_i, rec_i, F1_i = cal_statistic(cm)
-    print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP))
-    print('pre_i is : {pre_i}'.format(pre_i=pre_i))
-    print('rec_i is : {rec_i}'.format(rec_i=rec_i))
-    print('F1_i is : {F1_i}'.format(F1_i=F1_i))
+    # cm = confusion_matrix(all_labels, all_res)
+    # acc_SP, pre_i, rec_i, F1_i = cal_statistic(cm)
+    # print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP))
+    # print('pre_i is : {pre_i}'.format(pre_i=pre_i))
+    # print('rec_i is : {rec_i}'.format(rec_i=rec_i))
+    # print('F1_i is : {F1_i}'.format(F1_i=F1_i))
     valid_loss = total_loss / (total_num + total_num2)
-    valid_acc = total_correct / (total_num + total_num2)
-    return valid_loss, valid_acc, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4
+    # valid_acc = total_correct / (total_num + total_num2)
+    return valid_loss#, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4
 
 
 def test_epoch(valid_loader, valid_loader2, device, model, total_num, total_num2):
@@ -181,34 +187,36 @@ def test_epoch(valid_loader, valid_loader2, device, model, total_num, total_num2
 
           sig1, label1 = map(lambda x: x.to(device), data2)
           sig2, _ = map(lambda x: x.to(device), data1)
-          pred1 = model(sig1, sig2)  
-          all_labels.extend(label1.cpu().numpy())
-          all_res.extend(pred1.max(1)[1].cpu().numpy())
-          all_pred.extend(pred1.cpu().numpy())
-          loss, n_correct1, cnt1 = cal_loss(pred1, label1, device)
+          pred1, pred2 = model(sig1, sig2)  
+          # all_labels.extend(label1.cpu().numpy())
+          # all_res.extend(pred1.max(1)[1].cpu().numpy())
+          # loss, n_correct1, cnt1 = cal_loss(pred1, label1, device)
+          loss = model.loss
+          loss = loss(pred1,pred2)
+
           total_loss += loss.item()
-          total_correct += (n_correct1)
+          # total_correct += (n_correct1)
             #cnt_per_class += (cnt1 + cnt2)
 
-    np.savetxt(f'{emotion}_{model_name_base}_all_pred.txt',all_pred)
-    np.savetxt(f'{emotion}_{model_name_base}_all_label.txt', all_labels)
-    all_pred = np.array(all_pred)
-    plot_roc(all_labels,all_pred)
-    cm = confusion_matrix(all_labels, all_res)
-    print("test_cm:", cm)
-    acc_SP, pre_i, rec_i, F1_i = cal_statistic(cm)
-    print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP))
-    print('pre_i is : {pre_i}'.format(pre_i=pre_i))
-    print('rec_i is : {rec_i}'.format(rec_i=rec_i))
-    print('F1_i is : {F1_i}'.format(F1_i=F1_i))
-    test_acc = total_correct / (total_num + total_num2)
-    print('test_acc is : {test_acc}'.format(test_acc=test_acc))
+    # np.savetxt(f'{emotion}_{model_name_base}_all_pred.txt',all_pred)
+    # np.savetxt(f'{emotion}_{model_name_base}_all_label.txt', all_labels)
+    # all_pred = np.array(all_pred)
+    # plot_roc(all_labels,all_pred)
+    # cm = confusion_matrix(all_labels, all_res)
+    # print("test_cm:", cm)
+    # acc_SP, pre_i, rec_i, F1_i = cal_statistic(cm)
+    # print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP))
+    # print('pre_i is : {pre_i}'.format(pre_i=pre_i))
+    # print('rec_i is : {rec_i}'.format(rec_i=rec_i))
+    # print('F1_i is : {F1_i}'.format(F1_i=F1_i))
+    # test_acc = total_correct / (total_num + total_num2)
+    # print('test_acc is : {test_acc}'.format(test_acc=test_acc))
+    print(f'Test loss: {total_loss}')
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_fusion_transform'
-    model_name = f'{emotion}_baseline_fusion_transform.chkpt'
-    model_name2 = f'{emotion}_baseline_fusion_transform2.chkpt'
+    model_name_base = 'baseline_DCCA_transform'
+    model_name = f'{emotion}_baseline_DCCA_transform.chkpt'
     
     # --- Preprocess
     df = pd.read_csv('df.csv')
@@ -348,7 +356,7 @@ if __name__ == '__main__':
         # model2 = model2.to(device)
         # model1 = model1.to(device)
 
-        model = Fusion(model1, model2).to(device)
+        model = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
       
 
         
@@ -365,16 +373,16 @@ if __name__ == '__main__':
         for epoch_i in range(epoch):
             print('[ Epoch', epoch_i, ']')
             start = time.time()
-            train_loss, train_acc, train_cm = train_epoch(train_loader_text, train_loader_eeg, device, model, optimizer, train_text.__len__(), train_eeg.__len__())
+            train_loss = train_epoch(train_loader_text, train_loader_eeg, device, model, optimizer, train_text.__len__(), train_eeg.__len__())
       
 
-            train_accs.append(train_acc)
+            # train_accs.append(train_acc)
             train_losses.append(train_loss)
             start = time.time()
-            valid_loss, valid_acc, valid_cm, eva_indi = eval_epoch(valid_loader_text,valid_loader_eeg, device, model, val_text.__len__(), val_eeg.__len__())
+            valid_loss = eval_epoch(valid_loader_text,valid_loader_eeg, device, model, val_text.__len__(), val_eeg.__len__())
 
-            valid_accs.append(valid_acc)
-            eva_indis.append(eva_indi)
+            # valid_accs.append(valid_acc)
+            # eva_indis.append(eva_indi)
             valid_losses.append(valid_loss)
 
             model_state_dict = model.state_dict()
@@ -385,20 +393,20 @@ if __name__ == '__main__':
                 'epoch': epoch_i}
 
 
-            if eva_indi >= max(eva_indis):
+            if valid_losses <= min(valid_losses):
                 torch.save(checkpoint, str(r)+model_name)
     
                 print('    - [Info] The checkpoint file has been updated.')
 
         
-            print('  - (Training)  loss: {loss: 8.5f}, accuracy: {accu:3.3f} %, '
-                      'elapse: {elapse:3.3f} min'.format(loss=train_loss, accu=100 * train_acc,
+            print('  - (Training)  loss: {loss: 8.5f}, '
+                      'elapse: {elapse:3.3f} min'.format(loss=train_loss,
                                                          elapse=(time.time() - start) / 60))
-            print("train_cm:", train_cm)
-            print('  - (Validation)  loss: {loss: 8.5f}, accuracy: {accu:3.3f} %, '
-                      'elapse: {elapse:3.3f} min'.format(loss=valid_loss, accu=100 * valid_acc,
+            # print("train_cm:", train_cm)
+            print('  - (Validation)  loss: {loss: 8.5f}, '
+                      'elapse: {elapse:3.3f} min'.format(loss=valid_loss,
                                                          elapse=(time.time() - start) / 60))
-            print("valid_cm:", valid_cm)
+            # print("valid_cm:", valid_cm)
         
         
         print('ALL DONE')               
@@ -423,9 +431,15 @@ if __name__ == '__main__':
         model1 = nn.DataParallel(model1)
         model2 = nn.DataParallel(model2)
 
+        chkpt1 = torch.load(torchload, map_location = 'cuda')
+        chkpt2 = torch.load(torchload2, map_location = 'cuda')
+
+        model1.load_state_dict(chkpt1['model'])
+        model2.load_state_dict(chkpt2['model'])
+
 
         chkpoint = torch.load(test_model_name, map_location='cuda')
-        model= Fusion(model1, model2)
+        model= DeepCCA(model1, model2, outdim_size, use_all_singular_values)
         model.load_state_dict(chkpoint['model'])
         model = model.to(device)
         test_epoch(test_loader_text, test_loader_eeg, device, model, test_text.__len__(), test_eeg.__len__())
