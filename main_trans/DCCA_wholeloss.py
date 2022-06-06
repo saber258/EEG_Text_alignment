@@ -41,6 +41,11 @@ def cal_loss(pred1, label1, pred2, label2, device):
     loss = model.loss
     loss = loss(pred1, pred2)
 
+    CEloss1 = F.cross_entropy(pred1, label1, reduction='sum')
+    CEloss2 = F.cross_entropy(pred2, label2, reduction = 'sum')
+
+    loss = CEloss1 + CEloss2 + loss
+
     pred1 = pred1.max(1)[1]
     pred2 = pred2.max(1)[1]
     n_correct1 = pred1.eq(label1).sum().item()
@@ -73,9 +78,9 @@ def cal_statistic(cm):
 
 
 def train_epoch(train_loader1, train_loader2, device, model, optimizer, total_num, total_num2):
-    model.train()
     all_labels = []
     all_res = []
+    model.train()
     total_loss = 0
     total_correct = 0
     #cnt_per_class = np.zeros(class_num)
@@ -219,8 +224,8 @@ def test_epoch(valid_loader, valid_loader2, device, model, total_num, total_num2
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_DCCA_transform'
-    model_name = f'{emotion}_baseline_DCCA_transform.chkpt'
+    model_name_base = 'baseline_DCCA_whole_transform'
+    model_name = f'{emotion}_baseline_DCCA_whole_transform.chkpt'
     
     # --- Preprocess
     df = pd.read_csv('df.csv')
@@ -357,8 +362,8 @@ if __name__ == '__main__':
         model2.load_state_dict(chkpt2['model'])
 
 
-        model2 = model2.to(device)
-        model1 = model1.to(device)
+        # model2 = model2.to(device)
+        # model1 = model1.to(device)
 
         model = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
       

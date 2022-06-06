@@ -40,7 +40,7 @@ class FocalLoss(nn.Module):
 
 
 if __name__ == "__main__":
-    FL = FocalLoss(class_num=3, gamma=2)
+    FL = FocalLoss(class_num=2, gamma=2)
     CE = nn.CrossEntropyLoss()
     N = 4
     C = 5

@@ -67,6 +67,7 @@ def cal_statistic(cm):
 
 
 def train_epoch(train_loader1, train_loader2, device, model, optimizer, total_num, total_num2):
+    model.train()
     all_labels = []
     all_res = []
     model.train()

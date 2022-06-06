@@ -1,7 +1,9 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-
+import torch.nn as nn
+from config import *
+import torch.nn.functional as F
 
 class EEGDataset(Dataset):
     def __init__(self, signal, label):
@@ -52,9 +54,39 @@ class TextDataset(Dataset):
       add_special_tokens=True,
       max_length=self.max_len,
       return_token_type_ids=False,
-      pad_to_max_length = True,
+      padding = 'max_length',
+      truncation = True,
       return_attention_mask=True
       #return_tensors='pt',
     )
     return torch.FloatTensor(encoding['input_ids']).flatten(), torch.tensor(label, dtype=torch.long)
 
+
+class Fusion(nn.Module):
+  def __init__(self, model1, model2):
+    super(Fusion, self).__init__()
+    self.model1 = model1
+    self.model2 = model2
+    self.classifier = nn.Linear(4, class_num)
+
+  def forward(self, x1, x2):
+    x1 = self.model1(x1)
+    x2 = self.model2(x2)
+    x = torch.cat((x1, x2), dim = 1)
+    out = self.classifier(x)
+    return out
+
+
+class Whole(nn.Module):
+  def __init__(self,model1, model2):
+    super(Whole, self).__init__()
+    self.model1 = model1
+    self.model2 = model2
+
+  def forward(self, x1, x2):
+    x1 = self.model1(x1)
+    x2 = self.model2(x2)
+
+    return x1, x2
+
+    
