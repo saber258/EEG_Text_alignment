@@ -167,8 +167,8 @@ def test_epoch(valid_loader, device, model, total_num):
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_onlytext_transform'
-    model_name = f'{emotion}_baseline_onlytext_transform.chkpt'
+    model_name_base = 'baseline_onlytext'
+    model_name = f'{emotion}_baseline_onlytext.chkpt'
     
     # --- Preprocess
     df = pd.read_csv('df.csv')

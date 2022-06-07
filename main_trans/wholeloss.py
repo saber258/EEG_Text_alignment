@@ -69,8 +69,8 @@ def cal_statistic(cm):
 def train_epoch(train_loader1, train_loader2, device, model, optimizer, total_num, total_num2):
     all_labels = []
     all_res = []
+    all_res2 = []
     model.train()
-    model2.train()
     total_loss = 0
     total_correct = 0
     #cnt_per_class = np.zeros(class_num)
@@ -95,9 +95,8 @@ def train_epoch(train_loader1, train_loader2, device, model, optimizer, total_nu
       loss1, n_correct1, cnt1 = cal_loss(pred1, label1, device)
       #print(cnt1)
       
-      all_labels.extend(label2.cpu().numpy())
-      all_res.extend(pred2.max(1)[1].cpu().numpy())
-      loss2, n_correct2, cnt2 = cal_loss(pred2, label2, device)
+      all_res2.extend(pred2.max(1)[1].cpu().numpy())
+      loss2, n_correct2, cnt2 = cal_loss(pred2, label1, device)
       # print(cnt2)
       
     
@@ -110,18 +109,20 @@ def train_epoch(train_loader1, train_loader2, device, model, optimizer, total_nu
     #cnt_per_class += (cnt1 + cnt2)
   
       cm = confusion_matrix(all_labels, all_res)
+      cm2 = confusion_matrix(all_labels, all_res2)
       
 
     train_loss = total_loss / (total_num + total_num2)
     train_acc = total_correct / (total_num + total_num2)
 
-    return train_loss, train_acc, cm #cnt_per_class, cm
+    return train_loss, train_acc, cm, cm2 #cnt_per_class, cm
 
 
 def eval_epoch(valid_loader1, valid_loader2, device, model, total_num, total_num2):
     model.eval()
     all_labels = []
     all_res = []
+    all_res2= []
     total_loss = 0
     total_correct = 0
     cnt_per_class = np.zeros(class_num)
@@ -148,8 +149,7 @@ def eval_epoch(valid_loader1, valid_loader2, device, model, total_num, total_num
 
           
           
-          all_labels.extend(label2.cpu().numpy())
-          all_res.extend(pred2.max(1)[1].cpu().numpy())
+          all_res2.extend(pred2.max(1)[1].cpu().numpy())
           loss2, n_correct2, cnt2 = cal_loss(pred2, label2, device)
           
           loss = loss1 + loss2
@@ -157,22 +157,31 @@ def eval_epoch(valid_loader1, valid_loader2, device, model, total_num, total_num
           total_correct += (n_correct1 + n_correct2)
 
     cm = confusion_matrix(all_labels, all_res)
+    cm2 = confusion_matrix(all_labels, all_res2)
     acc_SP, pre_i, rec_i, F1_i = cal_statistic(cm)
+    acc_SP2, pre_i2, rec_i2, F1_i2 = cal_statistic(cm2)
     print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP))
     print('pre_i is : {pre_i}'.format(pre_i=pre_i))
     print('rec_i is : {rec_i}'.format(rec_i=rec_i))
     print('F1_i is : {F1_i}'.format(F1_i=F1_i))
+    print()
+    print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP2))
+    print('pre_i is : {pre_i}'.format(pre_i=pre_i2))
+    print('rec_i is : {rec_i}'.format(rec_i=rec_i2))
+    print('F1_i is : {F1_i}'.format(F1_i=F1_i2))
     valid_loss = total_loss / (total_num + total_num2)
     valid_acc = total_correct / (total_num + total_num2)
-    return valid_loss, valid_acc, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4
+    return valid_loss, valid_acc, cm, cm2, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4
 
 
 def test_epoch(valid_loader, valid_loader2, device, model, total_num, total_num2):
     all_labels = []
     all_res = []
+    all_res2 = []
     all_pres = []
-    all_recs = []
     all_pred = []
+    all_pred2 = []
+    all_pred2 = []
     model.eval()
     total_loss = 0
     total_correct = 0
@@ -197,9 +206,8 @@ def test_epoch(valid_loader, valid_loader2, device, model, total_num, total_num2
           all_res.extend(pred1.max(1)[1].cpu().numpy())
           all_pred.extend(pred1.cpu().numpy())
           loss1, n_correct1, cnt1 = cal_loss(pred1, label1, device)
-          all_labels.extend(label2.cpu().numpy())
-          all_res.extend(pred2.max(1)[1].cpu().numpy())
-          all_pred.extend(pred2.cpu().numpy())
+          all_res2.extend(pred2.max(1)[1].cpu().numpy())
+          all_pred2.extend(pred2.cpu().numpy())
           loss2, n_correct2, cnt2 = cal_loss(pred2, label2, device)
 
           loss = loss1 + loss2
@@ -208,23 +216,34 @@ def test_epoch(valid_loader, valid_loader2, device, model, total_num, total_num2
             #cnt_per_class += (cnt1 + cnt2)
 
     np.savetxt(f'{emotion}_{model_name_base}_all_pred.txt',all_pred)
+    np.savetxt(f'{emotion}_{model_name_base}_all_pred2.txt',all_pred2)
     np.savetxt(f'{emotion}_{model_name_base}_all_label.txt', all_labels)
     all_pred = np.array(all_pred)
+    all_pred2 = np.array(all_pred2)
     plot_roc(all_labels,all_pred)
-    cm = confusion_matrix(all_labels, all_res)
-    print("test_cm:", cm)
-    acc_SP, pre_i, rec_i, F1_i = cal_statistic(cm)
+    plot_roc(all_labels, all_pred2)
+    cm1 = confusion_matrix(all_labels, all_res)
+    cm2 = confusion_matrix(all_labels, all_res2)
+    print("test_cm:", cm1)
+    
+    acc_SP, pre_i, rec_i, F1_i = cal_statistic(cm1)
+    acc_SP2, pre_i2, rec_i2, F1_i2 = cal_statistic(cm2)
     print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP))
     print('pre_i is : {pre_i}'.format(pre_i=pre_i))
     print('rec_i is : {rec_i}'.format(rec_i=rec_i))
     print('F1_i is : {F1_i}'.format(F1_i=F1_i))
+    print('test_cm:', cm2)
+    print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP2))
+    print('pre_i is : {pre_i}'.format(pre_i=pre_i2))
+    print('rec_i is : {rec_i}'.format(rec_i=rec_i2))
+    print('F1_i is : {F1_i}'.format(F1_i=F1_i2))
     test_acc = total_correct / (total_num + total_num2)
     print('test_acc is : {test_acc}'.format(test_acc=test_acc))
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_simul_transform'
-    model_name = f'{emotion}_baseline_simul_transform_texteeg.chkpt'
+    model_name_base = 'baseline_eeg_plus_textCE'
+    model_name = f'{emotion}_baseline_eeg_plus_textCE.chkpt'
     
     # --- Preprocess
     df = pd.read_csv('df.csv')
@@ -371,13 +390,13 @@ if __name__ == '__main__':
         for epoch_i in range(epoch):
             print('[ Epoch', epoch_i, ']')
             start = time.time()
-            train_loss, train_acc, train_cm = train_epoch(train_loader_text, train_loader_eeg, device, model, optimizer, train_text.__len__(), train_eeg.__len__())
+            train_loss, train_acc, train_cm, train_cm2 = train_epoch(train_loader_text, train_loader_eeg, device, model, optimizer, train_text.__len__(), train_eeg.__len__())
       
 
             train_accs.append(train_acc)
             train_losses.append(train_loss)
             start = time.time()
-            valid_loss, valid_acc, valid_cm, eva_indi = eval_epoch(valid_loader_text,valid_loader_eeg, device, model, val_text.__len__(), val_eeg.__len__())
+            valid_loss, valid_acc, valid_cm, valid_cm2, eva_indi = eval_epoch(valid_loader_text,valid_loader_eeg, device, model, val_text.__len__(), val_eeg.__len__())
 
             valid_accs.append(valid_acc)
             eva_indis.append(eva_indi)
@@ -404,10 +423,12 @@ if __name__ == '__main__':
                       'elapse: {elapse:3.3f} min'.format(loss=train_loss, accu=100 * train_acc,
                                                          elapse=(time.time() - start) / 60))
             print("train_cm:", train_cm)
+            print('train_cm', train_cm2)
             print('  - (Validation)  loss: {loss: 8.5f}, accuracy: {accu:3.3f} %, '
                       'elapse: {elapse:3.3f} min'.format(loss=valid_loss, accu=100 * valid_acc,
                                                          elapse=(time.time() - start) / 60))
             print("valid_cm:", valid_cm)
+            print('valid_cm:', valid_cm2)
         
         
         print('ALL DONE')               

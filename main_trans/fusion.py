@@ -87,8 +87,8 @@ def train_epoch(train_loader1, train_loader2, device, model, optimizer, total_nu
           data2 = next(dataloader_iterator)
 
       sig1, label1 = map(lambda x: x.to(device), data2)
-      sig2, _ = map(lambda x: x.to(device), data1)
-
+      sig2, label2 = map(lambda x: x.to(device), data1)
+      
       
       optimizer.zero_grad()
       pred1 = model(sig1, sig2)
@@ -135,8 +135,8 @@ def eval_epoch(valid_loader1, valid_loader2, device, model, total_num, total_num
             data2 = next(dataloader_iterator)
       
           sig1, label1 = map(lambda x: x.to(device), data2)
-          sig2, _ = map(lambda x: x.to(device), data1)
-        
+          sig2, label2 = map(lambda x: x.to(device), data1)
+
           pred1 = model(sig1, sig2)
           all_labels.extend(label1.cpu().numpy())
           all_res.extend(pred1.max(1)[1].cpu().numpy())
@@ -181,12 +181,12 @@ def test_epoch(valid_loader, valid_loader2, device, model, total_num, total_num2
             data2 = next(dataloader_iterator)
 
           sig1, label1 = map(lambda x: x.to(device), data2)
-          sig2, _ = map(lambda x: x.to(device), data1)
+          sig2, label2 = map(lambda x: x.to(device), data1)
           pred1 = model(sig1, sig2)  
           all_labels.extend(label1.cpu().numpy())
           all_res.extend(pred1.max(1)[1].cpu().numpy())
           all_pred.extend(pred1.cpu().numpy())
-          loss, n_correct1, cnt1 = cal_loss(pred1, label1, device)
+          loss, n_correct1, cnt1 = cal_loss(pred1, label1,device)
           total_loss += loss.item()
           total_correct += (n_correct1)
             #cnt_per_class += (cnt1 + cnt2)
@@ -207,9 +207,8 @@ def test_epoch(valid_loader, valid_loader2, device, model, total_num, total_num2
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_fusion_transform'
-    model_name = f'{emotion}_baseline_fusion_transform.chkpt'
-    model_name2 = f'{emotion}_baseline_fusion_transform2.chkpt'
+    model_name_base = 'baseline_fusion'
+    model_name = f'{emotion}_baseline_fusion.chkpt'
     
     # --- Preprocess
     df = pd.read_csv('df.csv')
@@ -407,7 +406,7 @@ if __name__ == '__main__':
         print('total ' + str(time_consume) + 'seconds')
         plt.plot(valid_losses)
         plt.xlabel('epoch')
-        plt.ylim([0.0, 2])
+        plt.ylim([0.0, 1])
         plt.ylabel('valid loss')
         plt.title('loss change curve')
 

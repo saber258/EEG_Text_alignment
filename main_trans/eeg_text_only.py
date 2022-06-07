@@ -127,7 +127,7 @@ def train_epoch(train_loader1, train_loader2, device, model, model2, optimizer, 
     train_acc_text = total_correct_text / total_num
 
     train_loss_eeg = total_loss_eeg / total_num2
-    train_acc_eeg = total_loss_eeg / total_num2
+    train_acc_eeg = total_correct_eeg / total_num2
 
 
     return train_loss_text, train_acc_text, cm_text, train_loss_eeg, train_acc_eeg, cm_eeg
@@ -253,10 +253,10 @@ def test_epoch(valid_loader, valid_loader2, device, model, model2, total_num, to
           total_correct_eeg += n_correct2
             #cnt_per_class += (cnt1 + cnt2)
 
-    np.savetxt(f'{emotion}_{model_name_base}_text_all_pred.txt',all_pred_text)
-    np.savetxt(f'{emotion}_{model_name_base}_text_all_label.txt', all_labels_text)
-    np.savetxt(f'{emotion}_{model_name_base}_eeg_all_pred.txt',all_pred_eeg)
-    np.savetxt(f'{emotion}_{model_name_base}_eeg_all_label.txt', all_labels_eeg)
+    np.savetxt(f'{emotion}_{model_name_base}_all_pred.txt',all_pred_text)
+    np.savetxt(f'{emotion}_{model_name_base}_all_label.txt', all_labels_text)
+    np.savetxt(f'{emotion}_{model_name_base2}_all_pred.txt',all_pred_eeg)
+    np.savetxt(f'{emotion}_{model_name_base2}_all_label.txt', all_labels_eeg)
     all_pred_text = np.array(all_pred_text)
     plot_roc(all_labels_text,all_pred_text)
     cm_text = confusion_matrix(all_labels_text, all_res_text)
@@ -283,9 +283,11 @@ def test_epoch(valid_loader, valid_loader2, device, model, model2, total_num, to
     print('test_acc is : {test_acc}'.format(test_acc=test_acc_eeg))
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_texteeg_transform'
-    model_name = f'{emotion}_baseline_transform_text.chkpt'
-    model_name2 = f'{emotion}_baseline_transform2_eeg.chkpt'
+    model_name_base = 'baseline_text'
+    model_name_base2 = 'baseline_eeg'
+    plot_name = 'baseline'
+    model_name = f'{emotion}_baseline_simul_text.chkpt'
+    model_name2 = f'{emotion}_baseline_simul_eeg.chkpt'
     
     # --- Preprocess
     df = pd.read_csv('df.csv')
@@ -516,7 +518,7 @@ if __name__ == '__main__':
         plt.title('loss change curve')
         plt.legend()
 
-        plt.savefig(f'{emotion}_{model_name_base}results_text_%s.png'%r)
+        plt.savefig(f'{emotion}_{plot_name}results_%s.png'%r)
 
         
 

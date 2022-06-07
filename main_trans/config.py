@@ -29,8 +29,8 @@ eeg = [emotion, 'delta2', 'lowAlpha2', 'highAlpha2', 'lowBeta2', 'highBeta2',
 # torchload = 'baselines/text/0angry2_trans_baseline_onlytext_transform.chkpt'
 # torchload2 = 'baselines/eeg/0angry2_trans_baseline_onlyeeg_transform.chkpt'
 
-torchload = '0angry2_trans_baseline_transform_text.chkpt'
-torchload2 = '0angry2_trans_baseline_transform2_eeg.chkpt'
+torchload = 'baselines/text/0angry2_trans_baseline_onlytext.chkpt'
+torchload2 = 'baselines/eeg/0angry2_trans_baseline_onlyeeg.chkpt'
 
 outdim_size = class_num
 use_all_singular_values = False
