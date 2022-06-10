@@ -1,19 +1,20 @@
 batch_size = 8
 # d_model = 64
-d_model = 16
+d_model = 1024
 # num_layers = 4
 # num_heads = 5
-num_layers = 2
-num_heads = 4
+num_layers = 12
+num_heads = 12
 class_num = 2
 # d_inner = 512
-d_inner = 32
+d_inner = 768
 dropout = 0.1
-warm_steps = 4000 
+warm_steps = 4000
 fea_num = 7
 epoch = 100
 PAD = 0
 KS = 3
+
 Fea_PLUS = 2
 SIG_LEN = 32
 SIG_LEN2 = 8

@@ -7,7 +7,7 @@ from torch._C import device
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import Adam
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 from tqdm import tqdm
 import numpy as np
@@ -351,18 +351,32 @@ if __name__ == '__main__':
           max_len = MAX_LEN
 
         )
+        
+        # --- Sampler
+        target = df_train_text[:, 0].astype('int')
+        class_sample_count = np.unique(target, return_counts=True)[1]
+        weight = 1. / class_sample_count
+        samples_weight = weight[target]
+        samples_weight = torch.from_numpy(samples_weight)
+        samples_weigth = samples_weight.double()
+        sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+
+    
+
+        # --- Loader
         train_loader_text = DataLoader(dataset=train_text,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  #shuffle=True)
+                                  num_workers=2,
+                                  sampler = sampler)
+
         valid_loader_text = DataLoader(dataset=val_text,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  #shuffle=True)
+                                  num_workers=2,
+                                  shuffle=True)
         test_loader_text = DataLoader(dataset=test_text,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  #shuffle=True)
+                                  num_workers=2,
+                                  shuffle=True)
         # --- EEG
         train_eeg = EEGDataset(
             signal = df_train_eeg[:, 1:],
@@ -379,21 +393,31 @@ if __name__ == '__main__':
           label = df_test_eeg[:, 0]
         )
         # --- Dataloader EEG
+
+        # --- Sampler
+
+        target = df_train_eeg[:, 0].astype('int')
+        class_sample_count = np.unique(target, return_counts=True)[1]
+        weight = 1. / class_sample_count
+        samples_weight = weight[target]
+        samples_weight = torch.from_numpy(samples_weight)
+        samples_weigth = samples_weight.double()
+        sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+
         train_loader_eeg = DataLoader(dataset=train_eeg,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  # shuffle=True )
+                                  num_workers=2,
+                                  sampler = sampler)
+      
         valid_loader_eeg = DataLoader(dataset=val_eeg,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  # shuffle=True)
+                                  num_workers=2,
+                                  shuffle=True)
         
         test_loader_eeg = DataLoader(dataset=test_eeg,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  # shuffle=True)
-                
-        #print(train_eeg[0], train_text[0])
+                                  num_workers=2,
+                                  shuffle=True)
         
         model1 = Transformer(device=device, d_feature=train_text.text_len, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)

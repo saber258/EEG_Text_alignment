@@ -7,7 +7,7 @@ from torch._C import device
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import Adam
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 from tqdm import tqdm
 import numpy as np
@@ -91,7 +91,7 @@ def train_epoch(train_loader1, train_loader2, device, model, optimizer, total_nu
       
       
       optimizer.zero_grad()
-      pred1 = model(sig1, sig2)
+      pred1, _, _ = model(sig1, sig2)
       all_labels.extend(label1.cpu().numpy())
       all_res.extend(pred1.max(1)[1].cpu().numpy())
       loss, n_correct1, cnt1 = cal_loss(pred1, label1, device)
@@ -137,7 +137,7 @@ def eval_epoch(valid_loader1, valid_loader2, device, model, total_num, total_num
           sig1, label1 = map(lambda x: x.to(device), data2)
           sig2, label2 = map(lambda x: x.to(device), data1)
 
-          pred1 = model(sig1, sig2)
+          pred1, _, _ = model(sig1, sig2)
           all_labels.extend(label1.cpu().numpy())
           all_res.extend(pred1.max(1)[1].cpu().numpy())
           loss, n_correct1, cnt1 = cal_loss(pred1, label1, device)
@@ -182,7 +182,7 @@ def test_epoch(valid_loader, valid_loader2, device, model, total_num, total_num2
 
           sig1, label1 = map(lambda x: x.to(device), data2)
           sig2, label2 = map(lambda x: x.to(device), data1)
-          pred1 = model(sig1, sig2)  
+          pred1, _, _ = model(sig1, sig2)  
           all_labels.extend(label1.cpu().numpy())
           all_res.extend(pred1.max(1)[1].cpu().numpy())
           all_pred.extend(pred1.cpu().numpy())
@@ -287,18 +287,32 @@ if __name__ == '__main__':
           max_len = MAX_LEN
 
         )
+        
+        # --- Sampler
+        target = df_train_text[:, 0].astype('int')
+        class_sample_count = np.unique(target, return_counts=True)[1]
+        weight = 1. / class_sample_count
+        samples_weight = weight[target]
+        samples_weight = torch.from_numpy(samples_weight)
+        samples_weigth = samples_weight.double()
+        sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+
+    
+
+        # --- Loader
         train_loader_text = DataLoader(dataset=train_text,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  #shuffle=True)
+                                  num_workers=2,
+                                  sampler = sampler)
+
         valid_loader_text = DataLoader(dataset=val_text,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  #shuffle=True)
+                                  num_workers=2,
+                                  shuffle=True)
         test_loader_text = DataLoader(dataset=test_text,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  #shuffle=True)
+                                  num_workers=2,
+                                  shuffle=True)
         # --- EEG
         train_eeg = EEGDataset(
             signal = df_train_eeg[:, 1:],
@@ -315,21 +329,31 @@ if __name__ == '__main__':
           label = df_test_eeg[:, 0]
         )
         # --- Dataloader EEG
+
+        # --- Sampler
+
+        target = df_train_eeg[:, 0].astype('int')
+        class_sample_count = np.unique(target, return_counts=True)[1]
+        weight = 1. / class_sample_count
+        samples_weight = weight[target]
+        samples_weight = torch.from_numpy(samples_weight)
+        samples_weigth = samples_weight.double()
+        sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+
         train_loader_eeg = DataLoader(dataset=train_eeg,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  # shuffle=True )
+                                  num_workers=2,
+                                  sampler = sampler)
+      
         valid_loader_eeg = DataLoader(dataset=val_eeg,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  # shuffle=True)
+                                  num_workers=2,
+                                  shuffle=True)
         
         test_loader_eeg = DataLoader(dataset=test_eeg,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  # shuffle=True)
-                
-        #print(train_eeg[0], train_text[0])
+                                  num_workers=2,
+                                  shuffle=True)
         
         model1 = Transformer(device=device, d_feature=train_text.text_len, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
@@ -348,7 +372,7 @@ if __name__ == '__main__':
         # model2 = model2.to(device)
         # model1 = model1.to(device)
 
-        model = Fusion(model1, model2).to(device)
+        model = Fusion(model1, model2, d_feature = 40, d_model = 16, class_num = class_num).to(device)
       
 
         
@@ -425,7 +449,7 @@ if __name__ == '__main__':
 
 
         chkpoint = torch.load(test_model_name, map_location='cuda')
-        model= Fusion(model1, model2)
+        model= Fusion(model1, model2, d_feature = 40, d_model = 16, class_num = class_num)
         model.load_state_dict(chkpoint['model'])
         model = model.to(device)
         test_epoch(test_loader_text, test_loader_eeg, device, model, test_text.__len__(), test_eeg.__len__())

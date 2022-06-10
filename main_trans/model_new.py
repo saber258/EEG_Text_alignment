@@ -12,7 +12,7 @@ class Encoder(nn.Module):
             self,
             d_feature,
             n_layers, n_head, d_k, d_v,
-            d_model, d_inner, dropout=0.5):
+            d_model, d_inner, dropout=0.1):
         super().__init__()
 
         n_position = d_feature + 1
@@ -50,7 +50,7 @@ class Encoder2(nn.Module):
             self,
             d_feature,
             n_layers, n_head, d_k, d_v,
-            d_model, d_inner, dropout=0.5):
+            d_model, d_inner, dropout=0.1):
         super().__init__()
 
         n_position = d_feature + 1

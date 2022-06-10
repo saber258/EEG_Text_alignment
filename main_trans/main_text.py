@@ -6,14 +6,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import Adam
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
 from model_new import Transformer
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset
+from dataset_new import EEGDataset, TextDataset, BalancedBatchSampler
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -24,6 +24,8 @@ import time
 import os
 from transformers import AutoTokenizer
 from imblearn.over_sampling import RandomOverSampler
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
@@ -247,18 +249,37 @@ if __name__ == '__main__':
           max_len = MAX_LEN
 
         )
+        
+        # --- Sampler
+        target = df_train_text[:, 0].astype('int')
+        class_sample_count = np.unique(target, return_counts=True)[1]
+        weight = 1. / class_sample_count
+        samples_weight = weight[target]
+        samples_weight = torch.from_numpy(samples_weight)
+        samples_weigth = samples_weight.double()
+        sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+        batch_sampler_train = BalancedBatchSampler(train_text, 2, 8)
+        batch_sampler_val = BalancedBatchSampler(val_text, 2, 8)
+        batch_sampler_test = BalancedBatchSampler(test_text, 2, 8)
+    
+
+        # --- Loader
         train_loader_text = DataLoader(dataset=train_text,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  #shuffle=True)
+                                  num_workers=2,
+                                  sampler = sampler)
+                                  # batch_sampler = batch_sampler_train )
+
         valid_loader_text = DataLoader(dataset=val_text,
-                                  batch_size=batch_size,
-                                  num_workers=2)#,
-                                  #shuffle=True)
+                                  #batch_size=batch_size,
+                                  num_workers=2,
+                                  #shuffle=True,
+                                  batch_sampler = batch_sampler_val)
         test_loader_text = DataLoader(dataset=test_text,
-                                  batch_size=batch_size,
-                                  num_workers=2)#,
-                                  #shuffle=True)
+                                  #batch_size=batch_size,
+                                  num_workers=2,
+                                  #shuffle=True,
+                                  batch_sampler = batch_sampler_test)
         # --- EEG
         train_eeg = EEGDataset(
             signal = df_train_eeg[:, 1:],
@@ -275,21 +296,37 @@ if __name__ == '__main__':
           label = df_test_eeg[:, 0]
         )
         # --- Dataloader EEG
+
+        # --- Sampler
+
+        target = df_train_eeg[:, 0].astype('int')
+        class_sample_count = np.unique(target, return_counts=True)[1]
+        weight = 1. / class_sample_count
+        samples_weight = weight[target]
+        samples_weight = torch.from_numpy(samples_weight)
+        samples_weight = samples_weight.double()
+        sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+        batch_sampler_train = BalancedBatchSampler(train_eeg, 2, 8)
+        batch_sampler_val = BalancedBatchSampler(val_eeg, 2, 8)
+        batch_sampler_test = BalancedBatchSampler(test_eeg, 2, 8)
+
         train_loader_eeg = DataLoader(dataset=train_eeg,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  # shuffle=True )
+                                  num_workers=2,
+                                  sampler = sampler)
+                                  # batch_sampler = batch_sampler_train)
+      
         valid_loader_eeg = DataLoader(dataset=val_eeg,
-                                  batch_size=batch_size,
-                                  num_workers=2)#,
-                                  # shuffle=True)
+                                  #batch_size=batch_size,
+                                  num_workers=2,
+                                  #shuffle=True,
+                                  batch_sampler = batch_sampler_val)
         
         test_loader_eeg = DataLoader(dataset=test_eeg,
-                                  batch_size=batch_size,
-                                  num_workers=2)#,
-                                  # shuffle=True)
-                
-        #print(train_eeg[0], train_text[0])
+                                  #batch_size=batch_size,
+                                  num_workers=2,
+                                  #shuffle=True,
+                                  batch_sampler = batch_sampler_test)
         
         model = Transformer(device=device, d_feature=train_text.text_len, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
@@ -300,7 +337,7 @@ if __name__ == '__main__':
         
         optimizer = ScheduledOptim(
             Adam(filter(lambda x: x.requires_grad, model.parameters()),
-                 betas=(0.9, 0.98), eps=1e-4), d_model, warm_steps)
+                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-5), d_model, warm_steps)
         
         train_accs = []
         valid_accs = []

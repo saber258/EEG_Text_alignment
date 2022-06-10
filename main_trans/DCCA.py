@@ -7,7 +7,7 @@ from torch._C import device
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import Adam
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 from tqdm import tqdm
 import numpy as np
@@ -34,7 +34,7 @@ tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 
 
-def cal_loss(pred1, label1, pred2, device):
+def cal_loss(pred1, label1, pred2, label2, device):
 
     cnt_per_class = np.zeros(2)
 
@@ -44,7 +44,7 @@ def cal_loss(pred1, label1, pred2, device):
     pred1 = pred1.max(1)[1]
     pred2 = pred2.max(1)[1]
     n_correct1 = pred1.eq(label1).sum().item()
-    n_correct2 = pred2.eq(label1).sum().item()
+    n_correct2 = pred2.eq(label2).sum().item()
     n_correct = n_correct1 + n_correct2
     return loss, n_correct
 
@@ -75,6 +75,7 @@ def cal_statistic(cm):
 def train_epoch(train_loader1, train_loader2, device, model, optimizer, total_num, total_num2):
     model.train()
     all_labels = []
+    all_labels2 = [] 
     all_res = []
     all_res2 = []
     total_loss = 0
@@ -95,13 +96,19 @@ def train_epoch(train_loader1, train_loader2, device, model, optimizer, total_nu
       sig1, label1 = map(lambda x: x.to(device), data2)
       sig2, label2 = map(lambda x: x.to(device), data1)
 
+      # ros = RandomOverSampler(random_state=2)
+      # sig1, label1 = ros.fit_resample(sig1.cpu(), label1.cpu())
+      # sig2, label2 = ros.fit_resample(sig2.cpu(), label2.cpu())
+      # sig1, sig2 = torch.tensor(sig1).to(device), torch.tensor(sig2).to(device)
+      # label1, label2 = torch.tensor(label1).to(device), torch.tensor(label2).to(device)
       
       optimizer.zero_grad()
       pred1, pred2 = model(sig1, sig2)
       all_labels.extend(label1.cpu().numpy())
+      all_labels2.extend(label2.cpu().numpy())
       all_res.extend(pred1.max(1)[1].cpu().numpy())
       all_res2.extend(pred2.max(1)[1].cpu().numpy())
-      loss, n_correct1 = cal_loss(pred1, label1, pred2, device)
+      loss, n_correct1 = cal_loss(pred1, label1, pred2, label2, device)
       
       loss.backward()
       optimizer.step_and_update_lr()
@@ -110,7 +117,7 @@ def train_epoch(train_loader1, train_loader2, device, model, optimizer, total_nu
   
   
       cm = confusion_matrix(all_labels, all_res)
-      cm2 = confusion_matrix(all_labels, all_res2)
+      cm2 = confusion_matrix(all_labels2, all_res2)
       
 
     train_loss = total_loss / (total_num + total_num2)
@@ -123,6 +130,7 @@ def eval_epoch(valid_loader1, valid_loader2, device, model, total_num, total_num
     model.eval()
 
     all_labels = []
+    all_labels2 = []
     all_res = []
     all_res2=[]
     total_loss = 0
@@ -142,12 +150,13 @@ def eval_epoch(valid_loader1, valid_loader2, device, model, total_num, total_num
       
           sig1, label1 = map(lambda x: x.to(device), data2)
           sig2, label2 = map(lambda x: x.to(device), data1)
-        
+
           pred1, pred2 = model(sig1, sig2)
           all_labels.extend(label1.cpu().numpy())
+          all_labels2.extend(label2.cpu().numpy())
           all_res.extend(pred1.max(1)[1].cpu().numpy())
           all_res2.extend(pred2.max(1)[1].cpu().numpy())
-          loss, n_correct1 = cal_loss(pred1, label1, pred2, device)
+          loss, n_correct1 = cal_loss(pred1, label1, pred2, label2, device)
 
    
           total_loss += loss.item()
@@ -159,7 +168,7 @@ def eval_epoch(valid_loader1, valid_loader2, device, model, total_num, total_num
     print('pre_i is : {pre_i}'.format(pre_i=pre_i))
     print('rec_i is : {rec_i}'.format(rec_i=rec_i))
     print('F1_i is : {F1_i}'.format(F1_i=F1_i))
-    cm2 = confusion_matrix(all_labels, all_res2)
+    cm2 = confusion_matrix(all_labels2, all_res2)
     acc_SP2, pre_i2, rec_i2, F1_i2 = cal_statistic(cm2)
     print()
     print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP2))
@@ -173,6 +182,7 @@ def eval_epoch(valid_loader1, valid_loader2, device, model, total_num, total_num
 
 def test_epoch(valid_loader, valid_loader2, device, model, total_num, total_num2):
     all_labels = []
+    all_labels2 = []
     all_res = []
     all_pres = []
     all_pred = []
@@ -198,11 +208,12 @@ def test_epoch(valid_loader, valid_loader2, device, model, total_num, total_num2
           sig2, label2 = map(lambda x: x.to(device), data1)
           pred1, pred2 = model(sig1, sig2)  
           all_labels.extend(label1.cpu().numpy())
+          all_labels2.extend(label2.cpu().numpy())
           all_res.extend(pred1.max(1)[1].cpu().numpy())
           all_res2.extend(pred2.max(1)[1].cpu().numpy())
           all_pred.extend(pred1.cpu().numpy())
           all_pred2.extend(pred2.cpu().numpy())
-          loss, n_correct1 = cal_loss(pred1, label1, pred2, device)
+          loss, n_correct1 = cal_loss(pred1, label1, pred2, label2, device)
   
 
           total_loss += loss.item()
@@ -216,7 +227,7 @@ def test_epoch(valid_loader, valid_loader2, device, model, total_num, total_num2
     cm = confusion_matrix(all_labels, all_res)
     all_pred2 = np.array(all_pred2)
     plot_roc(all_labels,all_pred2)
-    cm2 = confusion_matrix(all_labels, all_res2)
+    cm2 = confusion_matrix(all_labels2, all_res2)
     print("test_cm:", cm)
     print('test_cm:', cm2)
     acc_SP, pre_i, rec_i, F1_i = cal_statistic(cm)
@@ -246,13 +257,14 @@ if __name__ == '__main__':
     X = df.drop([emotion], axis = 1)
     y= df[[emotion]]
 
-    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.3, shuffle = True)
+    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.5, stratify = y)
     ros = RandomOverSampler(random_state=2)
     X_resampled_text, y_resampled_text = ros.fit_resample(X_train, y_train)
 
-    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True)
+    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, stratify = y_val)
     df_test = pd.concat([X_test, y_test], axis = 1)
     df_train = pd.concat([X_resampled_text, y_resampled_text], axis = 1)
+    # df_train = pd.concat([X_train, y_train], axis = 1)
     df_train = df_train.sample(frac=1).reset_index(drop=True)
     df_val = pd.concat([X_val, y_val], axis = 1)
 
@@ -317,18 +329,32 @@ if __name__ == '__main__':
           max_len = MAX_LEN
 
         )
+        
+        # --- Sampler
+        target = df_train_text[:, 0].astype('int')
+        class_sample_count = np.unique(target, return_counts=True)[1]
+        weight = 1. / class_sample_count
+        samples_weight = weight[target]
+        samples_weight = torch.from_numpy(samples_weight)
+        samples_weigth = samples_weight.double()
+        sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+
+    
+
+        # --- Loader
         train_loader_text = DataLoader(dataset=train_text,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  #shuffle=True)
+                                  num_workers=2,
+                                  sampler = sampler)
+
         valid_loader_text = DataLoader(dataset=val_text,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  #shuffle=True)
+                                  num_workers=2,
+                                  shuffle=True)
         test_loader_text = DataLoader(dataset=test_text,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  #shuffle=True)
+                                  num_workers=2,
+                                  shuffle=True)
         # --- EEG
         train_eeg = EEGDataset(
             signal = df_train_eeg[:, 1:],
@@ -345,22 +371,33 @@ if __name__ == '__main__':
           label = df_test_eeg[:, 0]
         )
         # --- Dataloader EEG
+
+        # --- Sampler
+
+        target = df_train_eeg[:, 0].astype('int')
+        class_sample_count = np.unique(target, return_counts=True)[1]
+        weight = 1. / class_sample_count
+        samples_weight = weight[target]
+        samples_weight = torch.from_numpy(samples_weight)
+        samples_weigth = samples_weight.double()
+        sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+
         train_loader_eeg = DataLoader(dataset=train_eeg,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  # shuffle=True )
+                                  num_workers=2,
+                                  sampler = sampler)
+      
         valid_loader_eeg = DataLoader(dataset=val_eeg,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  # shuffle=True)
+                                  num_workers=2,
+                                  shuffle=True)
         
         test_loader_eeg = DataLoader(dataset=test_eeg,
                                   batch_size=batch_size,
-                                  num_workers=2)#,
-                                  # shuffle=True)
-                
-        #print(train_eeg[0], train_text[0])
+                                  num_workers=2,
+                                  shuffle=True)
         
+        # --- model
         model1 = Transformer(device=device, d_feature=train_text.text_len, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
         model2 = Transformer2(device=device, d_feature=train_eeg.sig_len, d_model=d_model, d_inner=d_inner,
@@ -373,10 +410,6 @@ if __name__ == '__main__':
 
         model1.load_state_dict(chkpt1['model'])
         model2.load_state_dict(chkpt2['model'])
-
-
-        model2 = model2.to(device)
-        model1 = model1.to(device)
 
         model = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
       
