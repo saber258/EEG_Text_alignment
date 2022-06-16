@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from model_new import Transformer, Transformer2
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset, Fusion
+from dataset_new import EEGDataset, TextDataset, Fusion, Text_EEGDataset
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -37,21 +37,17 @@ tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 def cal_loss(pred1, label1, pred2, out, device):
 
-    cnt_per_class = np.zeros(2)
+    cnt_per_class = np.zeros(3)
 
     loss1 = F.cross_entropy(out, label1, reduction = 'sum')
     
-    
-
     pred1 = pred1.max(1)[1]
     pred2 = pred2.max(1)[1]
     loss2 = wasserstein_distance(pred1.cpu(), pred2.cpu())
     loss = loss1 + loss2
     out = out.max(1)[1]
-    n_correct1 = pred1.eq(label1).sum().item()
-    n_correct2 = pred2.eq(label1).sum().item()
     n_correct3 = out.eq(label1).sum().item()
-    n_correct = n_correct1 + n_correct2 + n_correct3
+    n_correct = n_correct3
     return loss, n_correct
 
 
@@ -78,38 +74,26 @@ def cal_statistic(cm):
     return acc_SP, list(pre_i), list(rec_i), list(F1_i)
 
 
-def train_epoch(train_loader1, train_loader2, device, model, optimizer, total_num, total_num2):
+def train_epoch(train_loader1, device, model, optimizer, total_num, total_num2):
     model.train()
     all_labels = []
     all_res = []
-    all_res2 = []
-    all_res3 = []
+   
     total_loss = 0
     total_correct = 0
     #cnt_per_class = np.zeros(class_num)
 
   
-    dataloader_iterator = iter(train_loader1)
-  
-    for i, data1 in enumerate(train_loader2):
+    for batch in tqdm(train_loader1, mininterval=0.5, desc='- (Validation)  ', leave=False):
 
-      try:
-          data2 = next(dataloader_iterator)
-      except StopIteration:
-          dataloader_iterator = iter(train_loader1)
-          data2 = next(dataloader_iterator)
-
-      sig1, label1 = map(lambda x: x.to(device), data2)
-      sig2, label2 = map(lambda x: x.to(device), data1)
+      sig2, sig1, label1, = map(lambda x: x.to(device), batch)
 
       
       optimizer.zero_grad()
       out, pred1, pred2 = model(sig1, sig2)
-      
       all_labels.extend(label1.cpu().numpy())
       all_res.extend(pred1.max(1)[1].cpu().numpy())
-      all_res2.extend(pred2.max(1)[1].cpu().numpy())
-      all_res3.extend(out.max(1)[1].cpu().numpy())
+    
       loss, n_correct1 = cal_loss(pred1, label1, pred2, out, device)
       
       
@@ -120,50 +104,37 @@ def train_epoch(train_loader1, train_loader2, device, model, optimizer, total_nu
   
   
       cm = confusion_matrix(all_labels, all_res)
-      cm2 = confusion_matrix(all_labels, all_res2)
-      cm3 = confusion_matrix(all_labels, all_res3)
       
 
-    train_loss = total_loss / (2*(total_num) + 2*(total_num2))
-    train_acc = total_correct / (2*(total_num) + 2*(total_num2))
+    train_loss = total_loss / (total_num + total_num2)
+    train_acc = total_correct / total_num
 
-    return train_loss, train_acc, cm, cm2, cm3 
+    return train_loss, train_acc, cm
 
 
-def eval_epoch(valid_loader1, valid_loader2, device, model, total_num, total_num2):
+def eval_epoch(valid_loader1, device, model, total_num, total_num2):
     model.eval()
 
     all_labels = []
     all_res = []
-    all_res2=[]
-    all_res3 = []
+
     total_loss = 0
     total_correct = 0
 
     with torch.no_grad():
      
-        dataloader_iterator = iter(valid_loader1)
-  
-        for i, data1 in enumerate(valid_loader2):
+      for batch in tqdm(valid_loader1, mininterval=0.5, desc='- (Validation)  ', leave=False):
 
-          try:
-            data2 = next(dataloader_iterator)
-          except StopIteration:
-            dataloader_iterator = iter(valid_loader1)
-            data2 = next(dataloader_iterator)
+        sig2, sig1, label1, = map(lambda x: x.to(device), batch)
       
-          sig1, label1 = map(lambda x: x.to(device), data2)
-          sig2, label2 = map(lambda x: x.to(device), data1)
-        
-          out, pred1, pred2 = model(sig1, sig2)
-          all_labels.extend(label1.cpu().numpy())
-          all_res.extend(pred1.max(1)[1].cpu().numpy())
-          all_res2.extend(pred2.max(1)[1].cpu().numpy())
-          all_res3.extend(out.max(1)[1].cpu().numpy())
-          loss, n_correct1 = cal_loss(pred1, label1, pred2, out,device)
-   
-          total_loss += loss.item()
-          total_correct += (n_correct1)
+        out, pred1, pred2 = model(sig1, sig2)
+        all_labels.extend(label1.cpu().numpy())
+        all_res.extend(pred1.max(1)[1].cpu().numpy())
+        loss, n_correct1 = cal_loss(pred1, label1, pred2, out,device)
+
+  
+        total_loss += loss.item()
+        total_correct += (n_correct1)
 
     cm = confusion_matrix(all_labels, all_res)
     acc_SP, pre_i, rec_i, F1_i = cal_statistic(cm)
@@ -171,108 +142,56 @@ def eval_epoch(valid_loader1, valid_loader2, device, model, total_num, total_num
     print('pre_i is : {pre_i}'.format(pre_i=pre_i))
     print('rec_i is : {rec_i}'.format(rec_i=rec_i))
     print('F1_i is : {F1_i}'.format(F1_i=F1_i))
-    cm2 = confusion_matrix(all_labels, all_res2)
-    acc_SP2, pre_i2, rec_i2, F1_i2 = cal_statistic(cm2)
-    print()
-    print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP2))
-    print('pre_i is : {pre_i}'.format(pre_i=pre_i2))
-    print('rec_i is : {rec_i}'.format(rec_i=rec_i2))
-    print('F1_i is : {F1_i}'.format(F1_i=F1_i2))
-    cm3 = confusion_matrix(all_labels, all_res3)
-    acc_SP3, pre_i3, rec_i3, F1_i3 = cal_statistic(cm3)
-    print()
-    print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP3))
-    print('pre_i is : {pre_i}'.format(pre_i=pre_i3))
-    print('rec_i is : {rec_i}'.format(rec_i=rec_i3))
-    print('F1_i is : {F1_i}'.format(F1_i=F1_i3))
-    valid_loss = total_loss / (2*(total_num) + 2*(total_num2))
-    valid_acc = total_correct / (2*(total_num) + 2*(total_num2))
-    return valid_loss, valid_acc, cm, cm2, cm3,sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4
+    valid_loss = total_loss / (total_num + total_num2)
+    valid_acc = total_correct / total_num
+    return valid_loss, valid_acc, cm,sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4
 
 
-def test_epoch(valid_loader, valid_loader2, device, model, total_num, total_num2):
+def test_epoch(valid_loader, device, model, total_num, total_num2):
     all_labels = []
     all_res = []
-    all_pres = []
     all_pred = []
-    all_pred2 = []
-    all_res2 = []
-    all_pred3 = []
-    all_res3 = []
     model.eval()
     total_loss = 0
     total_correct = 0
-    cnt_per_class = np.zeros(class_num)
     with torch.no_grad():
-      
-        dataloader_iterator = iter(valid_loader)
-  
-        for i, data1 in enumerate(valid_loader2):
+     
+      for batch in tqdm(valid_loader, mininterval=0.5, desc='- (Validation)  ', leave=False):
 
-          try:
-            data2 = next(dataloader_iterator)
-          except StopIteration:
-            dataloader_iterator = iter(valid_loader)
-            data2 = next(dataloader_iterator)
+        sig2, sig1, label1, = map(lambda x: x.to(device), batch)
+        out, pred1, pred2 = model(sig1, sig2)  
+        all_labels.extend(label1.cpu().numpy())
+        all_res.extend(pred1.max(1)[1].cpu().numpy())
+        all_pred.extend(pred1.cpu().numpy())
+        loss, n_correct1 = cal_loss(pred1, label1, pred2, out, device)
 
-          sig1, label1 = map(lambda x: x.to(device), data2)
-          sig2, label2 = map(lambda x: x.to(device), data1)
-          out, pred1, pred2 = model(sig1, sig2)  
-          all_labels.extend(label1.cpu().numpy())
-          all_res.extend(pred1.max(1)[1].cpu().numpy())
-          all_res2.extend(pred2.max(1)[1].cpu().numpy())
-          all_res3.extend(out.max(1)[1].cpu().numpy())
-          all_pred.extend(pred1.cpu().numpy())
-          all_pred2.extend(pred2.cpu().numpy())
-          all_pred3.extend(out.cpu().numpy())
-          loss, n_correct1 = cal_loss(pred1, label1, pred2, out, device)
-  
 
-          total_loss += loss.item()
-          total_correct += (n_correct1)
+        total_loss += loss.item()
+        total_correct += (n_correct1)
 
-    np.savetxt(f'{emotion}_{model_name_base}_all_pred.txt',all_pred)
-    np.savetxt(f'{emotion}_{model_name_base}_all_pred2.txt',all_pred2)
-    np.savetxt(f'{emotion}_{model_name_base}_all_pred3.txt',all_pred3)
-    np.savetxt(f'{emotion}_{model_name_base}_all_label.txt', all_labels)
+    np.savetxt(f'baselines/fusion_wd/{emotion}_{model_name_base}_all_pred.txt',all_pred)
+
+    np.savetxt(f'baselines/fusion_wd/{emotion}_{model_name_base}_all_label.txt', all_labels)
     all_pred = np.array(all_pred)
     plot_roc(all_labels,all_pred)
     cm = confusion_matrix(all_labels, all_res)
-    all_pred2 = np.array(all_pred2)
-    plot_roc(all_labels,all_pred2)
-    cm2 = confusion_matrix(all_labels, all_res2)
-    all_pred3 = np.array(all_pred3)
-    plot_roc(all_labels,all_pred3)
-    cm3 = confusion_matrix(all_labels, all_res3)
     print("test_cm:", cm)
-    print('test_cm:', cm2)
-    print('test_cm:', cm3)
+
     acc_SP, pre_i, rec_i, F1_i = cal_statistic(cm)
-    acc_SP2, pre_i2, rec_i2, F1_i2 = cal_statistic(cm2)
-    acc_SP3, pre_i3, rec_i3, F1_i3 = cal_statistic(cm3)
+
     print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP))
     print('pre_i is : {pre_i}'.format(pre_i=pre_i))
     print('rec_i is : {rec_i}'.format(rec_i=rec_i))
     print('F1_i is : {F1_i}'.format(F1_i=F1_i))
-    print()
-    print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP2))
-    print('pre_i is : {pre_i}'.format(pre_i=pre_i2))
-    print('rec_i is : {rec_i}'.format(rec_i=rec_i2))
-    print('F1_i is : {F1_i}'.format(F1_i=F1_i2))
-    print()
-    print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP3))
-    print('pre_i is : {pre_i}'.format(pre_i=pre_i3))
-    print('rec_i is : {rec_i}'.format(rec_i=rec_i3))
-    print('F1_i is : {F1_i}'.format(F1_i=F1_i3))
-    test_acc = total_correct / (2*(total_num + total_num2))
+    test_acc = total_correct / total_num 
     print('test_acc is : {test_acc}'.format(test_acc=test_acc))
-    total_loss = total_loss / (2*(total_num + total_num2))
+    total_loss = total_loss / (total_num + total_num2)
     print(f'Test loss: {total_loss}')
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_fusion_wd'
-    model_name = f'{emotion}_baseline_fusion_wd.chkpt'
+    model_name_base = 'baseline_fusion_wd_lin'
+    model_name = f'{emotion}_baseline_fusion_wd_lin.chkpt'
     
     # --- Preprocess
     df = pd.read_csv('df.csv')
@@ -280,11 +199,11 @@ if __name__ == '__main__':
     X = df.drop([emotion], axis = 1)
     y= df[[emotion]]
 
-    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.3, shuffle = True)
+    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.3, shuffle = True, stratify = y)
     ros = RandomOverSampler(random_state=2)
     X_resampled_text, y_resampled_text = ros.fit_resample(X_train, y_train)
 
-    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True)
+    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True, stratify = y_val)
     df_test = pd.concat([X_test, y_test], axis = 1)
     df_train = pd.concat([X_resampled_text, y_resampled_text], axis = 1)
     df_train = df_train.sample(frac=1).reset_index(drop=True)
@@ -329,26 +248,28 @@ if __name__ == '__main__':
             device = torch.device('cuda')
         else:
             device = torch.device('cpu')
-
-        # --- Text
-        train_text = TextDataset(
+        # --- Text and EEG
+        train_text_eeg = Text_EEGDataset(
             texts = df_train_text[:,1:],
             labels = df_train_text[:,0],
             tokenizer = tokenizer,
-            max_len = MAX_LEN
+            max_len = MAX_LEN,
+            signals = df_train_eeg[:, 1:]
         )
-        val_text = TextDataset(
+        val_text_eeg = Text_EEGDataset(
             texts = df_val_text[:, 1:],
             labels = df_val_text[:, 0],
             tokenizer = tokenizer,
-            max_len = MAX_LEN
+            max_len = MAX_LEN,
+            signals = df_val_eeg[:, 1:]
         )
 
-        test_text = TextDataset(
+        test_text_eeg = Text_EEGDataset(
           texts = df_test_text[:, 1:],
           labels = df_test_text[:, 0],
           tokenizer = tokenizer,
-          max_len = MAX_LEN
+          max_len = MAX_LEN,
+          signals = df_test_eeg[:, 1:]
 
         )
         
@@ -358,70 +279,28 @@ if __name__ == '__main__':
         weight = 1. / class_sample_count
         samples_weight = weight[target]
         samples_weight = torch.from_numpy(samples_weight)
-        samples_weigth = samples_weight.double()
+        samples_weight = samples_weight.double()
         sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
 
-    
 
         # --- Loader
-        train_loader_text = DataLoader(dataset=train_text,
+        train_loader_text_eeg = DataLoader(dataset=train_text_eeg,
                                   batch_size=batch_size,
                                   num_workers=2,
                                   sampler = sampler)
 
-        valid_loader_text = DataLoader(dataset=val_text,
+        valid_loader_text_eeg = DataLoader(dataset=val_text_eeg,
                                   batch_size=batch_size,
                                   num_workers=2,
                                   shuffle=True)
-        test_loader_text = DataLoader(dataset=test_text,
-                                  batch_size=batch_size,
-                                  num_workers=2,
-                                  shuffle=True)
-        # --- EEG
-        train_eeg = EEGDataset(
-            signal = df_train_eeg[:, 1:],
-            label = df_train_eeg[:, 0]
-        )
-
-        val_eeg = EEGDataset(
-            signal = df_val_eeg[:, 1:],
-            label = df_val_eeg[:, 0]
-        )
-
-        test_eeg = EEGDataset(
-          signal = df_test_eeg[:, 1:],
-          label = df_test_eeg[:, 0]
-        )
-        # --- Dataloader EEG
-
-        # --- Sampler
-
-        target = df_train_eeg[:, 0].astype('int')
-        class_sample_count = np.unique(target, return_counts=True)[1]
-        weight = 1. / class_sample_count
-        samples_weight = weight[target]
-        samples_weight = torch.from_numpy(samples_weight)
-        samples_weigth = samples_weight.double()
-        sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
-
-        train_loader_eeg = DataLoader(dataset=train_eeg,
-                                  batch_size=batch_size,
-                                  num_workers=2,
-                                  sampler = sampler)
-      
-        valid_loader_eeg = DataLoader(dataset=val_eeg,
+        test_loader_text_eeg = DataLoader(dataset=test_text_eeg,
                                   batch_size=batch_size,
                                   num_workers=2,
                                   shuffle=True)
         
-        test_loader_eeg = DataLoader(dataset=test_eeg,
-                                  batch_size=batch_size,
-                                  num_workers=2,
-                                  shuffle=True)
-        
-        model1 = Transformer(device=device, d_feature=train_text.text_len, d_model=d_model, d_inner=d_inner,
+        model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        model2 = Transformer2(device=device, d_feature=train_eeg.sig_len, d_model=d_model, d_inner=d_inner,
+        model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
         model1 = nn.DataParallel(model1)
         model2 = nn.DataParallel(model2)
@@ -436,7 +315,9 @@ if __name__ == '__main__':
         model2 = model2.to(device)
         model1 = model1.to(device)
 
-        model = Fusion(model1, model2).to(device)
+        model = Fusion(device=device, model1 = model1, model2 = model2,
+        d_feature =4, d_model=d_model, d_inner=d_inner,
+        n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num).to(device)
       
 
         
@@ -453,13 +334,13 @@ if __name__ == '__main__':
         for epoch_i in range(epoch):
             print('[ Epoch', epoch_i, ']')
             start = time.time()
-            train_loss, train_acc, train_cm, train_cm2, train_cm3 = train_epoch(train_loader_text, train_loader_eeg, device, model, optimizer, train_text.__len__(), train_eeg.__len__())
+            train_loss, train_acc, train_cm = train_epoch(train_loader_text_eeg, device, model, optimizer, train_text_eeg.__len__(), train_text_eeg.__len__())
       
 
             train_accs.append(train_acc)
             train_losses.append(train_loss)
             start = time.time()
-            valid_loss, valid_acc, valid_cm, valid_cm2, valid_cm3, eva_indi = eval_epoch(valid_loader_text,valid_loader_eeg, device, model, val_text.__len__(), val_eeg.__len__())
+            valid_loss, valid_acc, valid_cm, eva_indi = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__(), val_text_eeg.__len__())
 
             valid_accs.append(valid_acc)
             eva_indis.append(eva_indi)
@@ -474,7 +355,7 @@ if __name__ == '__main__':
 
 
             if eva_indi >= max(eva_indis):
-                torch.save(checkpoint, str(r)+model_name)
+                torch.save(checkpoint, 'baselines/fusion_wd/'+str(r)+model_name)
     
                 print('    - [Info] The checkpoint file has been updated.')
 
@@ -483,14 +364,12 @@ if __name__ == '__main__':
                       'elapse: {elapse:3.3f} min'.format(loss=train_loss, accu=100 * train_acc,
                                                          elapse=(time.time() - start) / 60))
             print("train_cm:", train_cm)
-            print("train_cm:", train_cm2)
-            print("train_cm:", train_cm3)
+           
             print('  - (Validation)  loss: {loss: 8.5f}, accuracy: {accu:3.3f} %, '
                       'elapse: {elapse:3.3f} min'.format(loss=valid_loss, accu=100 * valid_acc,
                                                          elapse=(time.time() - start) / 60))
             print("valid_cm:", valid_cm)
-            print("valid_cm:", valid_cm2)
-            print("valid_cm:", valid_cm3)
+        
             
 
         
@@ -498,19 +377,36 @@ if __name__ == '__main__':
         print('ALL DONE')               
         time_consume = (time.time() - time_start_i)
         print('total ' + str(time_consume) + 'seconds')
-        plt.plot(valid_losses)
+        fig1 = plt.figure('Figure 1')
+        plt.plot(train_losses, label = 'train')
+        plt.plot(valid_losses, label= 'valid')
         plt.xlabel('epoch')
-        plt.ylim([0,2])
-        plt.ylabel('valid loss')
+        plt.ylim([0.0, 2])
+        plt.ylabel('loss')
+        plt.legend(loc ="upper right")
         plt.title('loss change curve')
 
-        plt.savefig(f'{emotion}_{model_name_base}results_%s.png'%r)
+        plt.savefig(f'baselines/fusion_wd/{emotion}_{model_name_base}results_%s_loss.png'%r)
+
+        fig2 = plt.figure('Figure 2')
+        plt.plot(train_accs, label = 'train')
+        plt.plot(valid_accs, label = 'valid')
+        plt.xlabel('epoch')
+        plt.ylim([0.0, 1])
+        plt.ylabel('accuracy')
+        plt.legend(loc ="upper right")
+        plt.title('accuracy change curve')
+
+        plt.savefig(f'baselines/fusion_wd/{emotion}_{model_name_base}results_%s_acc.png'%r)
         
 
-        test_model_name = str(r) + model_name
+        test_model_name = 'baselines/fusion_wd/'+str(r) + model_name
         chkpoint = torch.load(test_model_name, map_location='cuda')
-        model= Fusion(model1, model2)
+        model = Fusion(device=device, model1 = model1, model2 = model2,
+        d_feature =4, d_model=d_model, d_inner=d_inner,
+        n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num).to(device)
         model.load_state_dict(chkpoint['model'])
         model = model.to(device)
-        test_epoch(test_loader_text, test_loader_eeg, device, model, test_text.__len__(), test_eeg.__len__())
+        test_epoch(test_loader_text_eeg, device, model, test_text_eeg.__len__(), test_text_eeg.__len__())
+
 

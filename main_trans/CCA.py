@@ -3,8 +3,10 @@ from pandas._libs.tslibs.conversion import OutOfBoundsTimedelta
 import torch
 import torch.nn as nn
 from transformers.utils.dummy_pt_objects import MODEL_FOR_VISION_2_SEQ_MAPPING
-from model_new import Transformer, Transformer2
+from model_new import Transformer, Transformer2, Transformer3
 from config import *
+import torch.nn.functional as F
+
 
 
 class cca_loss():
@@ -95,35 +97,65 @@ class DeepCCA(nn.Module):
         super(DeepCCA, self).__init__()
         self.model1 = model1
         self.model2 = model2
-
+        # self.classifier = nn.Linear(6, 3)
+       
         self.loss = cca_loss(outdim_size, use_all_singular_values, device).loss
 
     def forward(self, x1, x2):
         
         output1 = self.model1(x1)
         output2 = self.model2(x2)
+        
+        
 
         return output1, output2
 
 
 class DeepCCA_fusion(nn.Module):
-    def __init__(self, model1, model2, outdim_size, use_all_singular_values, device=torch.device('cuda')):
+    def __init__(self, model1, outdim_size, use_all_singular_values, d_feature, d_model, d_inner,
+            n_layers, n_head, d_k=64, d_v=64, dropout = 0.5,
+            class_num=3, device=torch.device('cuda')):
         super(DeepCCA_fusion, self).__init__()
         self.model1 = model1
-        self.model2 = model2
+        self.Transformer = Transformer3(device=device, d_feature=4, d_model=d_model, d_inner=d_inner,
+                            n_layers=n_layers, n_head=n_head, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
 
         self.loss = cca_loss(outdim_size, use_all_singular_values, device).loss
         self.classifier = nn.Linear(4, class_num)
 
     def forward(self, x1, x2):
-        """
-        x1, x2 are the vectors needs to be make correlated
-        dim=[batch_size, feats]
-        """
+        
         # feature * batch_size
-        x1 = self.model1(x1)
-        x2 = self.model2(x2)
+        x1, x2 = self.model1(x1, x2)
         x = torch.cat((x1, x2), dim = 1)
-        out = self.classifier(x)
+        out = self.classifier(F.relu(x))
+        # out = self.Transformer(x)
 
         return out, x1, x2
+
+
+class Fusion(nn.Module):
+  def __init__(self, device, model1, model2,
+            d_feature, d_model, d_inner,
+            n_layers, n_head, d_k=64, d_v=64, dropout = 0.5,
+            class_num=3):
+    super(Fusion, self).__init__()
+    self.device = device
+    self.model1 = model1
+    self.Transformer = Transformer3(device=device, d_feature=4, d_model=d_model, d_inner=d_inner,
+                            n_layers=n_layers, n_head=n_head, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+    self.classifier = nn.Linear(4, class_num)
+    # self.linear1_cov = nn.Conv1d(8, 1, kernel_size=1)
+    # self.linear1_linear = nn.Linear(4, class_num)
+    # # self.linear2_cov = nn.Conv1d(d_model, 1, kernel_size=1)
+    # # self.linear2_linear = nn.Linear(d_feature, class_num)
+
+  def forward(self, x1, x2):
+    x1, x2 = self.model1(x1)
+    
+    x = torch.cat((x1, x2), dim = 1)
+    # out = self.linear1_cov(x)
+    out = self.classifier(F.relu(x))
+
+    # out = self.Transformer(x)
+    return out, x1, x2

@@ -2,13 +2,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from sublayer_new import MultiHeadAttention, MultiHeadAttention2
+from sublayer_new import MultiHeadAttention, MultiHeadAttention2, MultiHeadAttention3
 from config import PAD
 
 
 class PositionwiseFeedForward(nn.Module):
 
-    def __init__(self, d_in, d_hid, dropout=0.1):
+    def __init__(self, d_in, d_hid, dropout=0.5):
         super().__init__()
         self.w_1 = nn.Conv1d(d_in, d_hid, 1)  
         self.w_2 = nn.Conv1d(d_hid, d_in, 1)  
@@ -70,7 +70,7 @@ def get_attn_key_pad_mask(seq_k, seq_q):
 
 class EncoderLayer(nn.Module):
 
-    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.1):
+    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.5):
         super(EncoderLayer, self).__init__()
         self.slf_attn = MultiHeadAttention(
             n_head, d_model, d_k, d_v, dropout=dropout)
@@ -88,9 +88,29 @@ class EncoderLayer(nn.Module):
 
 class EncoderLayer2(nn.Module):
 
-    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.1):
+    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.5):
         super(EncoderLayer2, self).__init__()
         self.slf_attn = MultiHeadAttention2(
+            n_head, d_model, d_k, d_v, dropout=dropout)
+        self.pos_ffn = PositionwiseFeedForward(d_model, d_inner, dropout=dropout)
+
+    def forward(self, enc_input, non_pad_mask=None, slf_attn_mask=None):
+        enc_output, enc_slf_attn = self.slf_attn(
+            enc_input, enc_input, enc_input, mask=slf_attn_mask)
+        enc_output *= non_pad_mask
+
+        enc_output = self.pos_ffn(enc_output)
+        enc_output *= non_pad_mask
+
+        return enc_output, enc_slf_attn
+
+
+
+class EncoderLayer3(nn.Module):
+
+    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.5):
+        super(EncoderLayer3, self).__init__()
+        self.slf_attn = MultiHeadAttention3(
             n_head, d_model, d_k, d_v, dropout=dropout)
         self.pos_ffn = PositionwiseFeedForward(d_model, d_inner, dropout=dropout)
 

@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
-from model_new import Transformer
+from model_new import Transformer, Transformer2, Transformer3
 from optim_new import ScheduledOptim
 from dataset_new import EEGDataset, TextDataset, BalancedBatchSampler, TransformerFusion
 from config import *
@@ -368,10 +368,23 @@ if __name__ == '__main__':
                                   # batch_sampler = batch_sampler_test)
         
 
-        
-        model = TransformerFusion(device=device, d_feature1 = train_text.text_len,
-        d_feature2=train_eeg.sig_len, d_feature = 40, d_model=d_model, d_inner=d_inner,
+        model1 = Transformer(device=device, d_feature=train_text.text_len, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        model2 = Transformer2(device=device, d_feature=train_eeg.sig_len, d_model=d_model, d_inner=d_inner,
+                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        model1 = nn.DataParallel(model1)
+        model2 = nn.DataParallel(model2)
+        
+        chkpt1 = torch.load(torchload, map_location = 'cuda')
+        chkpt2 = torch.load(torchload2, map_location = 'cuda')
+
+        model1.load_state_dict(chkpt1['model'])
+        model2.load_state_dict(chkpt2['model'])
+
+        model = TransformerFusion(device=device, model1 = model1, model2 = model2, d_feature1 = train_text.text_len,
+        d_feature2=train_eeg.sig_len, d_feature = 80, d_model=d_model, d_inner=d_inner,
+                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        # model2 = 
 
         model = nn.DataParallel(model)
         model = model.to(device)
@@ -437,7 +450,7 @@ if __name__ == '__main__':
 
         test_model_name = str(r) + model_name
         model = TransformerFusion(device=device, d_feature1 = train_text.text_len,
-        d_feature2=train_eeg.sig_len, d_feature = 40, d_model=d_model, d_inner=d_inner,
+        d_feature2=train_eeg.sig_len, d_feature = 80, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
         model = nn.DataParallel(model)
 

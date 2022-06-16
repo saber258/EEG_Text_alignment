@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from model_new import Transformer
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset, BalancedBatchSampler
+from dataset_new import EEGDataset, TextDataset, BalancedBatchSampler, Text_EEGDataset
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -38,6 +38,7 @@ def cal_loss(pred, label, device):
     cnt_per_class = np.zeros(2)
 
     loss = F.cross_entropy(pred, label, reduction='sum')
+    # loss = FL(pred, label, device)
     pred = pred.max(1)[1]
     n_correct = pred.eq(label).sum().item()
     cnt_per_class = [cnt_per_class[j] + pred.eq(j).sum().item() for j in range(class_num)]
@@ -79,7 +80,7 @@ def train_epoch(train_loader, device, model, optimizer, total_num):
     
     for batch in tqdm(train_loader, mininterval=100, desc='- (Training)  ', leave=False): 
 
-        sig, label, = map(lambda x: x.to(device), batch)
+        _, sig, label, = map(lambda x: x.to(device), batch)
         optimizer.zero_grad()
         pred = model(sig)
         all_labels.extend(label.cpu().numpy())
@@ -107,7 +108,7 @@ def eval_epoch(valid_loader, device, model, total_num):
     cnt_per_class = np.zeros(class_num)
     with torch.no_grad():
         for batch in tqdm(valid_loader, mininterval=100, desc='- (Validation)  ', leave=False):
-            sig, label, = map(lambda x: x.to(device), batch)
+            _, sig, label, = map(lambda x: x.to(device), batch)
             pred = model(sig)
             all_labels.extend(label.cpu().numpy())
             all_res.extend(pred.max(1)[1].cpu().numpy())
@@ -140,7 +141,7 @@ def test_epoch(valid_loader, device, model, total_num):
     with torch.no_grad():
         for batch in tqdm(valid_loader, mininterval=0.5, desc='- (Validation)  ', leave=False):
 
-            sig, label, = map(lambda x: x.to(device), batch)
+            _, sig, label, = map(lambda x: x.to(device), batch)
 
             pred = model(sig)  
             all_labels.extend(label.cpu().numpy())
@@ -153,8 +154,8 @@ def test_epoch(valid_loader, device, model, total_num):
             cnt_per_class += cnt
 
 
-    np.savetxt(f'{emotion}_{model_name_base}_all_pred.txt',all_pred)
-    np.savetxt(f'{emotion}_{model_name_base}_all_label.txt', all_labels)
+    np.savetxt(f'baselines/text/{emotion}_{model_name_base}_all_pred.txt',all_pred)
+    np.savetxt(f'baselines/text/{emotion}_{model_name_base}_all_label.txt', all_labels)
     all_pred = np.array(all_pred)
     plot_roc(all_labels,all_pred)
     cm = confusion_matrix(all_labels, all_res)
@@ -228,25 +229,28 @@ if __name__ == '__main__':
         else:
             device = torch.device('cpu')
 
-        # --- Text
-        train_text = TextDataset(
+        # --- Text and EEG
+        train_text_eeg = Text_EEGDataset(
             texts = df_train_text[:,1:],
             labels = df_train_text[:,0],
             tokenizer = tokenizer,
-            max_len = MAX_LEN
+            max_len = MAX_LEN,
+            signals = df_train_eeg[:, 1:]
         )
-        val_text = TextDataset(
+        val_text_eeg = Text_EEGDataset(
             texts = df_val_text[:, 1:],
             labels = df_val_text[:, 0],
             tokenizer = tokenizer,
-            max_len = MAX_LEN
+            max_len = MAX_LEN,
+            signals = df_val_eeg[:, 1:]
         )
 
-        test_text = TextDataset(
+        test_text_eeg = Text_EEGDataset(
           texts = df_test_text[:, 1:],
           labels = df_test_text[:, 0],
           tokenizer = tokenizer,
-          max_len = MAX_LEN
+          max_len = MAX_LEN,
+          signals = df_test_eeg[:, 1:]
 
         )
         
@@ -256,79 +260,68 @@ if __name__ == '__main__':
         weight = 1. / class_sample_count
         samples_weight = weight[target]
         samples_weight = torch.from_numpy(samples_weight)
-        samples_weigth = samples_weight.double()
+        samples_weight = samples_weight.double()
         sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
-        batch_sampler_train = BalancedBatchSampler(train_text, 2, 8)
-        batch_sampler_val = BalancedBatchSampler(val_text, 2, 8)
-        batch_sampler_test = BalancedBatchSampler(test_text, 2, 8)
+
     
 
         # --- Loader
-        train_loader_text = DataLoader(dataset=train_text,
+        train_loader_text_eeg = DataLoader(dataset=train_text_eeg,
                                   batch_size=batch_size,
                                   num_workers=2,
                                   sampler = sampler)
-                                  # batch_sampler = batch_sampler_train )
 
-        valid_loader_text = DataLoader(dataset=val_text,
-                                  #batch_size=batch_size,
+        valid_loader_text_eeg = DataLoader(dataset=val_text_eeg,
+                                  batch_size=batch_size,
                                   num_workers=2,
-                                  #shuffle=True,
-                                  batch_sampler = batch_sampler_val)
-        test_loader_text = DataLoader(dataset=test_text,
-                                  #batch_size=batch_size,
+                                  shuffle=True)
+        test_loader_text_eeg = DataLoader(dataset=test_text_eeg,
+                                  batch_size=batch_size,
                                   num_workers=2,
-                                  #shuffle=True,
-                                  batch_sampler = batch_sampler_test)
+                                  shuffle=True)
         # --- EEG
-        train_eeg = EEGDataset(
-            signal = df_train_eeg[:, 1:],
-            label = df_train_eeg[:, 0]
-        )
+        # train_eeg = EEGDataset(
+        #     signal = df_train_eeg[:, 1:],
+        #     label = df_train_eeg[:, 0]
+        # )
 
-        val_eeg = EEGDataset(
-            signal = df_val_eeg[:, 1:],
-            label = df_val_eeg[:, 0]
-        )
+        # val_eeg = EEGDataset(
+        #     signal = df_val_eeg[:, 1:],
+        #     label = df_val_eeg[:, 0]
+        # )
 
-        test_eeg = EEGDataset(
-          signal = df_test_eeg[:, 1:],
-          label = df_test_eeg[:, 0]
-        )
+        # test_eeg = EEGDataset(
+        #   signal = df_test_eeg[:, 1:],
+        #   label = df_test_eeg[:, 0]
+        
         # --- Dataloader EEG
 
         # --- Sampler
 
-        target = df_train_eeg[:, 0].astype('int')
-        class_sample_count = np.unique(target, return_counts=True)[1]
-        weight = 1. / class_sample_count
-        samples_weight = weight[target]
-        samples_weight = torch.from_numpy(samples_weight)
-        samples_weight = samples_weight.double()
-        sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
-        batch_sampler_train = BalancedBatchSampler(train_eeg, 2, 8)
-        batch_sampler_val = BalancedBatchSampler(val_eeg, 2, 8)
-        batch_sampler_test = BalancedBatchSampler(test_eeg, 2, 8)
+        # target = df_train_eeg[:, 0].astype('int')
+        # class_sample_count = np.unique(target, return_counts=True)[1]
+        # weight = 1. / class_sample_count
+        # samples_weight = weight[target]
+        # samples_weight = torch.from_numpy(samples_weight)
+        # samples_weigth = samples_weight.double()
+        # sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
 
-        train_loader_eeg = DataLoader(dataset=train_eeg,
-                                  batch_size=batch_size,
-                                  num_workers=2,
-                                  sampler = sampler)
-                                  # batch_sampler = batch_sampler_train)
+        # train_loader_eeg = DataLoader(dataset=train_eeg,
+        #                           batch_size=batch_size,
+        #                           num_workers=2,
+        #                           sampler = sampler)
       
-        valid_loader_eeg = DataLoader(dataset=val_eeg,
-                                  #batch_size=batch_size,
-                                  num_workers=2,
-                                  #shuffle=True,
-                                  batch_sampler = batch_sampler_val)
+        # valid_loader_eeg = DataLoader(dataset=val_eeg,
+        #                           batch_size=batch_size,
+        #                           num_workers=2,
+        #                           shuffle=True)
         
-        test_loader_eeg = DataLoader(dataset=test_eeg,
-                                  #batch_size=batch_size,
-                                  num_workers=2,
-                                  #shuffle=True,
-                                  batch_sampler = batch_sampler_test)
+        # test_loader_eeg = DataLoader(dataset=test_eeg,
+        #                           batch_size=batch_size,
+        #                           num_workers=2,
+        #                           shuffle=True)
         
-        model = Transformer(device=device, d_feature=train_text.text_len, d_model=d_model, d_inner=d_inner,
+        model = Transformer(device=device, d_feature=train_text_eeg.text_len, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
 
         model = nn.DataParallel(model)
@@ -348,12 +341,12 @@ if __name__ == '__main__':
         for epoch_i in range(epoch):
             print('[ Epoch', epoch_i, ']')
             start = time.time()
-            train_loss, train_acc, train_cnt, train_cm = train_epoch(train_loader_text, device, model, optimizer, train_text.__len__())
+            train_loss, train_acc, train_cnt, train_cm = train_epoch(train_loader_text_eeg, device, model, optimizer, train_text_eeg.__len__())
 
             train_accs.append(train_acc)
             train_losses.append(train_loss)
             start = time.time()
-            valid_loss, valid_acc, valid_cnt, valid_cm, eva_indi = eval_epoch(valid_loader_text, device, model, val_text.__len__())
+            valid_loss, valid_acc, valid_cnt, valid_cm, eva_indi = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__())
 
             valid_accs.append(valid_acc)
             eva_indis.append(eva_indi)
@@ -367,7 +360,7 @@ if __name__ == '__main__':
                 'epoch': epoch_i}
 
             if eva_indi >= max(eva_indis):
-                torch.save(checkpoint, str(r)+model_name)
+                torch.save(checkpoint, 'baselines/text/' + str(r)+model_name)
                 print('    - [Info] The checkpoint file has been updated.')
 
         
@@ -384,17 +377,31 @@ if __name__ == '__main__':
         print('ALL DONE')               
         time_consume = (time.time() - time_start_i)
         print('total ' + str(time_consume) + 'seconds')
-        plt.plot(valid_losses)
+        fig1 = plt.figure('Figure 1')
+        plt.plot(train_losses, label = 'train')
+        plt.plot(valid_losses, label= 'valid')
         plt.xlabel('epoch')
         plt.ylim([0.0, 2])
-        plt.ylabel('valid loss')
+        plt.ylabel('loss')
+        plt.legend(loc ="upper right")
         plt.title('loss change curve')
 
-        plt.savefig(f'{emotion}_{model_name_base}results_%s.png'%r)
+        plt.savefig(f'baselines/text/{emotion}_{model_name_base}results_%s_loss.png'%r)
+
+        fig2 = plt.figure('Figure 2')
+        plt.plot(train_accs, label = 'train')
+        plt.plot(valid_accs, label = 'valid')
+        plt.xlabel('epoch')
+        plt.ylim([0.0, 1])
+        plt.ylabel('accuracy')
+        plt.legend(loc ="upper right")
+        plt.title('accuracy change curve')
+
+        plt.savefig(f'baselines/text/{emotion}_{model_name_base}results_%s_acc.png'%r)
         
 
-        test_model_name = str(r) + model_name
-        model = Transformer(device=device, d_feature=test_text.text_len, d_model=d_model, d_inner=d_inner,
+        test_model_name = 'baselines/text/' + str(r) + model_name
+        model = Transformer(device=device, d_feature=test_text_eeg.text_len, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout,
                             class_num=class_num)
         model = nn.DataParallel(model)
@@ -402,5 +409,5 @@ if __name__ == '__main__':
         chkpoint = torch.load(test_model_name, map_location='cuda')
         model.load_state_dict(chkpoint['model'])
         model = model.to(device)
-        test_epoch(test_loader_text, device, model, test_text.__len__())
+        test_epoch(test_loader_text_eeg, device, model, test_text_eeg.__len__())
 
