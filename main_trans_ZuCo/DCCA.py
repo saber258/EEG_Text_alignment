@@ -29,14 +29,14 @@ from CCA import cca_loss, DeepCCA
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
-FL = FocalLoss(class_num=2, gamma=1.5, average=False)
+FL = FocalLoss(class_num=3, gamma=1.5, average=False)
 tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 
 
 def cal_loss(pred1, label1, pred2, device):
 
-    cnt_per_class = np.zeros(2)
+    cnt_per_class = np.zeros(3)
 
     loss = model.loss
     loss = loss(pred1, pred2)
@@ -298,14 +298,13 @@ if __name__ == '__main__':
         model1 = nn.DataParallel(model1)
         model2 = nn.DataParallel(model2)
         
-        # chkpt1 = torch.load(torchload, map_location = 'cuda')
-        # chkpt2 = torch.load(torchload2, map_location = 'cuda')
+        chkpt1 = torch.load(torchload, map_location = 'cuda')
+        chkpt2 = torch.load(torchload2, map_location = 'cuda')
 
-        # model1.load_state_dict(chkpt1['model'])
-        # model2.load_state_dict(chkpt2['model'])
+        model1.load_state_dict(chkpt1['model'])
+        model2.load_state_dict(chkpt2['model'])
 
         model = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
-      
 
         
         optimizer = ScheduledOptim(

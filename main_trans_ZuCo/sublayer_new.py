@@ -7,7 +7,7 @@ from config import SIG_LEN, SIG_LEN2, SIG_LEN3
 class MultiHeadAttention(nn.Module):
     ''' Multi-Head Attention module '''
 
-    def __init__(self, n_head, d_model, d_k, d_v, dropout=0.5):
+    def __init__(self, n_head, d_model, d_k, d_v, dropout=0.1):
         super().__init__()
 
         self.n_head = n_head
@@ -62,7 +62,7 @@ class MultiHeadAttention(nn.Module):
 class MultiHeadAttention2(nn.Module):
     ''' Multi-Head Attention module '''
 
-    def __init__(self, n_head, d_model, d_k, d_v, dropout=0.5):
+    def __init__(self, n_head, d_model, d_k, d_v, dropout=0.1):
         super().__init__()
 
         self.n_head = n_head
@@ -118,7 +118,7 @@ class MultiHeadAttention2(nn.Module):
 class MultiHeadAttention3(nn.Module):
     ''' Multi-Head Attention module '''
 
-    def __init__(self, n_head, d_model, d_k, d_v, dropout=0.5):
+    def __init__(self, n_head, d_model, d_k, d_v, dropout=0.1):
         super().__init__()
 
         self.n_head = n_head

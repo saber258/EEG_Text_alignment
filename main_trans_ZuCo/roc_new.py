@@ -20,16 +20,16 @@ def plot_roc(all_labels, all_pred):
     fpr = dict()
     tpr = dict()
     roc_auc = dict()
-    for i in range(2):
+    for i in range(3):
         fpr[i], tpr[i], _ = roc_curve(label_h[:, i], all_pred[:, i])
         roc_auc[i] = auc(fpr[i], tpr[i])
 
 
-    all_fpr = np.unique(np.concatenate([fpr[i] for i in range(1)]))
+    all_fpr = np.unique(np.concatenate([fpr[i] for i in range(2)]))
     mean_tpr = np.zeros_like(all_fpr)
-    for i in range(2):
+    for i in range(3):
         mean_tpr += interp(all_fpr, fpr[i], tpr[i])
-    mean_tpr /= 2
+    mean_tpr /= 3
     fpr["macro"] = all_fpr
     tpr["macro"] = mean_tpr
     roc_auc["macro"] = auc(fpr["macro"], tpr["macro"])
@@ -49,9 +49,9 @@ def plot_roc(all_labels, all_pred):
                    ''.format(roc_auc["macro"]),
              color='navy', linestyle=':', linewidth=4)
 
-    colors = cycle(['aqua', 'darkorange'])#, 'cornflowerblue'])#, 'red', 'green'])
+    colors = cycle(['aqua', 'darkorange', 'cornflowerblue'])#, 'red', 'green'])
     c = ['NORM','MI','STTC','CD','HYP']
-    for i, color in zip(range(2), colors):
+    for i, color in zip(range(3), colors):
         plt.plot(fpr[i], tpr[i], color=color, lw=lw,
                  label='ROC curve of class {0} (area = {1:0.3f})'
                  ''.format(c[i], roc_auc[i]))

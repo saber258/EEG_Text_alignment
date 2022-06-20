@@ -30,14 +30,14 @@ from CCA import cca_loss, DeepCCA, DeepCCA_fusion
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
-FL = FocalLoss(class_num=2, gamma=1.5, average=False)
+FL = FocalLoss(class_num=3, gamma=1.5, average=False)
 tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 
 
 def cal_loss(pred1, pred2, label1, out, device):
 
-    cnt_per_class = np.zeros(2)
+    cnt_per_class = np.zeros(3)
 
     loss1 = model3.loss
     loss1 = loss1(pred1, pred2)
@@ -331,7 +331,7 @@ if __name__ == '__main__':
         # model.load_state_dict(chkpt['model'])
         model3 = model3.to(device)
 
-        model = DeepCCA_fusion(model3, outdim_size = outdim_size,d_feature = 4,
+        model = DeepCCA_fusion(model3, outdim_size = outdim_size,d_feature = 6,
          d_model = d_model, d_inner = d_inner,n_layers = num_layers, n_head = num_heads, d_k=64, d_v=64, dropout = 0.5,
             class_num=3, use_all_singular_values = False).to(device)
       
@@ -441,7 +441,7 @@ if __name__ == '__main__':
         # model.load_state_dict(chkpt['model'])
         # model = model.to(device)
 
-        model = DeepCCA_fusion(model3, outdim_size = outdim_size,d_feature = 4,
+        model = DeepCCA_fusion(model3, outdim_size = outdim_size,d_feature = 6,
          d_model = d_model, d_inner = d_inner,n_layers = num_layers, n_head = num_heads, d_k=64, d_v=64, dropout = 0.5,
             class_num=3, use_all_singular_values = False).to(device)
         model.load_state_dict(chkpoint['model'])

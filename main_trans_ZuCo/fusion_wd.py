@@ -30,7 +30,7 @@ from scipy.stats import wasserstein_distance
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
-FL = FocalLoss(class_num=2, gamma=1.5, average=False)
+FL = FocalLoss(class_num=3, gamma=1.5, average=False)
 tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 
@@ -190,8 +190,8 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_fusion_wd_lin'
-    model_name = f'{emotion}_baseline_fusion_wd_lin.chkpt'
+    model_name_base = 'baseline_fusion_wd_trans'
+    model_name = f'{emotion}_baseline_fusion_wd_trans.chkpt'
     
     # --- Preprocess
     df = pd.read_csv('df.csv')
@@ -316,7 +316,7 @@ if __name__ == '__main__':
         model1 = model1.to(device)
 
         model = Fusion(device=device, model1 = model1, model2 = model2,
-        d_feature =4, d_model=d_model, d_inner=d_inner,
+        d_feature =6, d_model=d_model, d_inner=d_inner,
         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num).to(device)
       
 
@@ -403,7 +403,7 @@ if __name__ == '__main__':
         test_model_name = 'baselines/fusion_wd/'+str(r) + model_name
         chkpoint = torch.load(test_model_name, map_location='cuda')
         model = Fusion(device=device, model1 = model1, model2 = model2,
-        d_feature =4, d_model=d_model, d_inner=d_inner,
+        d_feature =6, d_model=d_model, d_inner=d_inner,
         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num).to(device)
         model.load_state_dict(chkpoint['model'])
         model = model.to(device)

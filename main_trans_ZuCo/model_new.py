@@ -126,7 +126,7 @@ class Transformer(nn.Module):
             self, device,
             d_feature, d_model, d_inner,
             n_layers, n_head, d_k=64, d_v=64, dropout = 0.5,
-            class_num=2):
+            class_num=3):
 
         super().__init__()
 
@@ -161,7 +161,7 @@ class Transformer2(nn.Module):
             self, device,
             d_feature, d_model, d_inner,
             n_layers, n_head, d_k=64, d_v=64, dropout = 0.5,
-            class_num=2):
+            class_num=3):
 
         super().__init__()
 
@@ -194,7 +194,7 @@ class Transformer3(nn.Module):
             self, device,
             d_feature, d_model, d_inner,
             n_layers, n_head, d_k=64, d_v=64, dropout = 0.5,
-            class_num=2):
+            class_num=3):
 
         super().__init__()
 
