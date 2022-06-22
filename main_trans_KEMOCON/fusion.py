@@ -29,13 +29,13 @@ from imblearn.over_sampling import RandomOverSampler
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
-FL = FocalLoss(class_num=2, gamma=1.5, average=False)
+FL = FocalLoss(class_num=3, gamma=1.5, average=False)
 tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 
 def cal_loss(pred, label, device):
 
-    cnt_per_class = np.zeros(2)
+    cnt_per_class = np.zeros(3)
 
     loss = F.cross_entropy(pred, label, reduction='sum')
     pred = pred.max(1)[1]
@@ -180,8 +180,8 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_fusion_lin'
-    model_name = f'{emotion}_baseline_fusion_lin.chkpt'
+    model_name_base = 'baseline_earlyfusion_trans'
+    model_name = f'{emotion}_baseline_earlyfusion_trans.chkpt'
     
     # --- Preprocess
     df = pd.read_csv('df.csv')
@@ -295,11 +295,11 @@ if __name__ == '__main__':
         model1 = nn.DataParallel(model1)
         model2 = nn.DataParallel(model2)
         
-        chkpt1 = torch.load(torchload, map_location = 'cuda')
-        chkpt2 = torch.load(torchload2, map_location = 'cuda')
+        # chkpt1 = torch.load(torchload, map_location = 'cuda')
+        # chkpt2 = torch.load(torchload2, map_location = 'cuda')
 
-        model1.load_state_dict(chkpt1['model'])
-        model2.load_state_dict(chkpt2['model'])
+        # model1.load_state_dict(chkpt1['model'])
+        # model2.load_state_dict(chkpt2['model'])
 
 
         model2 = model2.to(device)
@@ -308,14 +308,14 @@ if __name__ == '__main__':
         # model = Fusion(model1, model2, d_model = 16, class_num = class_num).to(device)
       
         model = Fusion(device=device, model1 = model1, model2 = model2,
-        d_feature =4, d_model=d_model, d_inner=d_inner,
+        d_feature =80, d_model=d_model, d_inner=d_inner,
         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num).to(device)
       
 
         
         optimizer = ScheduledOptim(
             Adam(filter(lambda x: x.requires_grad, model.parameters()),
-                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-2, weight_decay = 1e-5), d_model, warm_steps)
+                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-5, weight_decay = 1e-5), d_model, warm_steps)
         
         train_accs = []
         valid_accs = []
@@ -394,7 +394,7 @@ if __name__ == '__main__':
 
         chkpoint = torch.load(test_model_name, map_location='cuda')
         model = Fusion(device=device, model1 = model1, model2 = model2,
-        d_feature =4, d_model=d_model, d_inner=d_inner,
+        d_feature =80, d_model=d_model, d_inner=d_inner,
         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num).to(device)
         model.load_state_dict(chkpoint['model'])
         model = model.to(device)

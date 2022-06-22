@@ -1,6 +1,7 @@
 from google.colab import output
 import numpy as np
 import torch
+from torch.nn.modules.batchnorm import BatchNorm1d
 from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
 from config import *
@@ -99,14 +100,20 @@ class Text_EEGDataset(Dataset):
 
 
 class Linear(nn.Module):
-  def __init__(self, device, d_feature, d_model, class_num):
+  def __init__(self, device, d_feature, class_num):
       super(Linear, self).__init__()
 
-      self.linear1_linear = nn.Linear(3, class_num)
-      self.classifier = nn.Linear(3, class_num)
+      # self.linear1_cov = nn.Conv1d(d_feature, 1, kernel_size=1)
+      self.batchnorm = nn.BatchNorm1d(d_feature, affine = False)
+      self.linear1_linear = nn.Linear(d_feature, 256)
+      self.hidden = nn.Linear(256, 128)
+      self.classifier = nn.Linear(128, class_num)
   def forward(self,x1):
     # x1 = self.linear1_cov(x1)
+    x1 = self.batchnorm(x1)
+    # x1 = x1.contiguous().view(x1.size()[0], -1)
     x1 = self.linear1_linear(x1)
+    x1 = self.hidden(x1)
     out = self.classifier(F.relu(x1))
 
     return out

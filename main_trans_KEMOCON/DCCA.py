@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from model_new import Transformer, Transformer2
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset, Fusion, Text_EEGDataset
+from dataset_new import EEGDataset, TextDataset, Fusion, Text_EEGDataset, Linear
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -29,14 +29,14 @@ from CCA import cca_loss, DeepCCA
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
-FL = FocalLoss(class_num=2, gamma=1.5, average=False)
+FL = FocalLoss(class_num=3, gamma=1.5, average=False)
 tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 
 
 def cal_loss(pred1, label1, pred2, device):
 
-    cnt_per_class = np.zeros(2)
+    cnt_per_class = np.zeros(3)
 
     loss = model.loss
     loss = loss(pred1, pred2)
@@ -180,8 +180,8 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_DCCA_only'
-    model_name = f'{emotion}_baseline_DCCA_only.chkpt'
+    model_name_base = 'baseline_DCCA_only_lin'
+    model_name = f'{emotion}_baseline_DCCA_only_lin.chkpt'
     
     # --- Preprocess
     df = pd.read_csv('df.csv')
@@ -291,10 +291,14 @@ if __name__ == '__main__':
                                   shuffle=True)
         
         # --- model
-        model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
-                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
-                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        # model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
+        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        # model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
+        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        model1 = Linear(device, 32, class_num)
+        model2 = Linear(device, 48, class_num)
+        
+        
         model1 = nn.DataParallel(model1)
         model2 = nn.DataParallel(model2)
         
@@ -305,7 +309,6 @@ if __name__ == '__main__':
         # model2.load_state_dict(chkpt2['model'])
 
         model = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
-      
 
         
         optimizer = ScheduledOptim(
@@ -382,7 +385,7 @@ if __name__ == '__main__':
         plt.plot(train_losses, label = 'train')
         plt.plot(valid_losses, label= 'valid')
         plt.xlabel('epoch')
-        plt.ylim([-1, 1])
+        plt.ylim([-0.15, 0.1])
         plt.ylabel('loss')
         plt.legend(loc ="upper right")
         plt.title('loss change curve')

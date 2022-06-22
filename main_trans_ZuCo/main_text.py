@@ -174,7 +174,7 @@ if __name__ == '__main__':
     model_name = f'{emotion}_baseline_onlytext.chkpt'
     
     # --- Preprocess
-    df = pd.read_csv('df.csv')
+    df = pd.read_csv(f'preprocessed_eeg/{patient}_mean.csv')
 
     X = df.drop([emotion], axis = 1)
     y= df[[emotion]]
@@ -190,13 +190,19 @@ if __name__ == '__main__':
     df_val = pd.concat([X_val, y_val], axis = 1)
 
     df_train_text = df_train[[emotion, 'new_words']]
-    df_train_eeg = df_train[eeg]
+    df_train_eeg_label = df_train[[emotion]]
+    df_train_eeg = df_train.iloc[:, 3:]
+    df_train_eeg = pd.concat([df_train_eeg_label, df_train_eeg], axis=1)
 
     df_val_text = df_val[[emotion, 'new_words']]
-    df_val_eeg = df_val[eeg]
+    df_val_eeg_label = df_val[[emotion]]
+    df_val_eeg = df_val.iloc[:, 3:]
+    df_val_eeg = pd.concat([df_val_eeg_label, df_val_eeg], axis=1)
 
     df_test_text = df_test[[emotion, 'new_words']]
-    df_test_eeg = df_test[eeg]
+    df_test_eeg_label = df_test[[emotion]]
+    df_test_eeg = df_test.iloc[:, 3:]
+    df_test_eeg = pd.concat([df_test_eeg_label, df_test_eeg], axis=1)
 
     # --- Save CSV
     df_train_text.to_csv('df_train_text.csv', header = None, index = False, index_label = False)
@@ -279,49 +285,8 @@ if __name__ == '__main__':
                                   batch_size=batch_size,
                                   num_workers=2,
                                   shuffle=True)
-        # --- EEG
-        # train_eeg = EEGDataset(
-        #     signal = df_train_eeg[:, 1:],
-        #     label = df_train_eeg[:, 0]
-        # )
-
-        # val_eeg = EEGDataset(
-        #     signal = df_val_eeg[:, 1:],
-        #     label = df_val_eeg[:, 0]
-        # )
-
-        # test_eeg = EEGDataset(
-        #   signal = df_test_eeg[:, 1:],
-        #   label = df_test_eeg[:, 0]
         
-        # --- Dataloader EEG
-
-        # --- Sampler
-
-        # target = df_train_eeg[:, 0].astype('int')
-        # class_sample_count = np.unique(target, return_counts=True)[1]
-        # weight = 1. / class_sample_count
-        # samples_weight = weight[target]
-        # samples_weight = torch.from_numpy(samples_weight)
-        # samples_weigth = samples_weight.double()
-        # sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
-
-        # train_loader_eeg = DataLoader(dataset=train_eeg,
-        #                           batch_size=batch_size,
-        #                           num_workers=2,
-        #                           sampler = sampler)
-      
-        # valid_loader_eeg = DataLoader(dataset=val_eeg,
-        #                           batch_size=batch_size,
-        #                           num_workers=2,
-        #                           shuffle=True)
-        
-        # test_loader_eeg = DataLoader(dataset=test_eeg,
-        #                           batch_size=batch_size,
-        #                           num_workers=2,
-        #                           shuffle=True)
-        
-        model = Transformer(device=device, d_feature=train_text_eeg.text_len, d_model=d_model, d_inner=d_inner,
+        model = Transformer(device=device, d_feature=25, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
 
         model = nn.DataParallel(model)
@@ -401,7 +366,7 @@ if __name__ == '__main__':
         
 
         test_model_name = 'baselines/text/' + str(r) + model_name
-        model = Transformer(device=device, d_feature=test_text_eeg.text_len, d_model=d_model, d_inner=d_inner,
+        model = Transformer(device=device, d_feature=25, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout,
                             class_num=class_num)
         model = nn.DataParallel(model)

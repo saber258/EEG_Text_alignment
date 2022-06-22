@@ -15,7 +15,7 @@ import pandas as pd
 from transformers.utils.dummy_pt_objects import OpenAIGPTForSequenceClassification
 from model_new import Transformer, Transformer2
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset, Fusion, Text_EEGDataset
+from dataset_new import EEGDataset, TextDataset, Fusion, Text_EEGDataset, Linear
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -30,14 +30,14 @@ from CCA import cca_loss, DeepCCA, DeepCCA_fusion
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
-FL = FocalLoss(class_num=2, gamma=1.5, average=False)
+FL = FocalLoss(class_num=3, gamma=1.5, average=False)
 tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 
 
 def cal_loss(pred1, pred2, label1, out, device):
 
-    cnt_per_class = np.zeros(2)
+    cnt_per_class = np.zeros(3)
 
     loss1 = model3.loss
     loss1 = loss1(pred1, pred2)
@@ -308,30 +308,31 @@ if __name__ == '__main__':
                                   num_workers=2,
                                   shuffle=True)
         
-        model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
-                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
-                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        # model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
+        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        # model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
+        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        model1 = Linear(device, d_feature = 32, class_num = 3)
+        model2 = Linear(device, d_feature = 48, class_num=3)
         model1 = nn.DataParallel(model1)
         model2 = nn.DataParallel(model2)
         
-        chkpt1 = torch.load(torchload, map_location = 'cuda')
-        chkpt2 = torch.load(torchload2, map_location = 'cuda')
+        # chkpt1 = torch.load(torchload, map_location = 'cuda')
+        # chkpt2 = torch.load(torchload2, map_location = 'cuda')
 
-        model1.load_state_dict(chkpt1['model'])
-        model2.load_state_dict(chkpt2['model'])
+        # model1.load_state_dict(chkpt1['model'])
+        # model2.load_state_dict(chkpt2['model'])
 
 
         model2 = model2.to(device)
         model1 = model1.to(device)
 
         model3 = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
-        # model = nn.DataParallel(model)
         # chkpt = torch.load(torchload3, map_location = 'cuda')
-        # model.load_state_dict(chkpt['model'])
+        # model3.load_state_dict(chkpt['model'])
         model3 = model3.to(device)
 
-        model = DeepCCA_fusion(model3, outdim_size = outdim_size,d_feature = 4,
+        model = DeepCCA_fusion(model3, outdim_size = outdim_size,d_feature = 6,
          d_model = d_model, d_inner = d_inner,n_layers = num_layers, n_head = num_heads, d_k=64, d_v=64, dropout = 0.5,
             class_num=3, use_all_singular_values = False).to(device)
       
@@ -418,18 +419,21 @@ if __name__ == '__main__':
         test_model_name = 'baselines/DCCA_fusion/'+str(r) + model_name
        
         chkpoint = torch.load(test_model_name, map_location='cuda')
-        model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
-                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
-                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        # model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
+        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        # model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
+        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        model1 = Linear(device, d_feature = 32, class_num =3)
+        model2 = Linear(device, d_feature = 48, class_num = 3)
+        
         model1 = nn.DataParallel(model1)
         model2 = nn.DataParallel(model2)
         
-        chkpt1 = torch.load(torchload, map_location = 'cuda')
-        chkpt2 = torch.load(torchload2, map_location = 'cuda')
+        # chkpt1 = torch.load(torchload, map_location = 'cuda')
+        # chkpt2 = torch.load(torchload2, map_location = 'cuda')
 
-        model1.load_state_dict(chkpt1['model'])
-        model2.load_state_dict(chkpt2['model'])
+        # model1.load_state_dict(chkpt1['model'])
+        # model2.load_state_dict(chkpt2['model'])
 
 
         model2 = model2.to(device)
@@ -441,7 +445,7 @@ if __name__ == '__main__':
         # model.load_state_dict(chkpt['model'])
         # model = model.to(device)
 
-        model = DeepCCA_fusion(model3, outdim_size = outdim_size,d_feature = 4,
+        model = DeepCCA_fusion(model3, outdim_size = outdim_size,d_feature = 6,
          d_model = d_model, d_inner = d_inner,n_layers = num_layers, n_head = num_heads, d_k=64, d_v=64, dropout = 0.5,
             class_num=3, use_all_singular_values = False).to(device)
         model.load_state_dict(chkpoint['model'])

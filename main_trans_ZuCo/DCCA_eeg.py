@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from model_new import Transformer, Transformer2
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset, BalancedBatchSampler, Text_EEGDataset
+from dataset_new import EEGDataset, Linear, TextDataset, BalancedBatchSampler, Text_EEGDataset
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -72,6 +72,7 @@ def cal_statistic(cm):
 def train_epoch(train_loader, device, model, optimizer, total_num):
     all_labels = []
     all_res = []
+    all_pred_train = []
     model.train()
     total_loss = 0
     total_correct = 0
@@ -83,9 +84,10 @@ def train_epoch(train_loader, device, model, optimizer, total_num):
 
         sig2, sig1, label, = map(lambda x: x.to(device), batch)
         optimizer.zero_grad()
-        _, pred= model(sig1, sig2)
+        _, pred = model(sig1, sig2)  
         all_labels.extend(label.cpu().numpy())
         all_res.extend(pred.max(1)[1].cpu().numpy())
+        all_pred_train.extend(pred.detach().cpu().numpy())
         loss, n_correct, cnt = cal_loss(pred, label, device)
         loss.backward()
         optimizer.step_and_update_lr()
@@ -97,12 +99,13 @@ def train_epoch(train_loader, device, model, optimizer, total_num):
 
     train_loss = total_loss / total_num
     train_acc = total_correct / total_num
-    return train_loss, train_acc, cnt_per_class, cm
+    return train_loss, train_acc, cnt_per_class, cm, all_pred_train, all_labels
 
 
 def eval_epoch(valid_loader, device, model, total_num):
     all_labels = []
     all_res = []
+    all_pred = []
     model.eval()
     total_loss = 0
     total_correct = 0
@@ -110,9 +113,10 @@ def eval_epoch(valid_loader, device, model, total_num):
     with torch.no_grad():
         for batch in tqdm(valid_loader, mininterval=100, desc='- (Validation)  ', leave=False):
             sig2, sig1, label, = map(lambda x: x.to(device), batch)
-            _, pred= model(sig1, sig2)
+            _, pred = model(sig1, sig2)  
             all_labels.extend(label.cpu().numpy())
             all_res.extend(pred.max(1)[1].cpu().numpy())
+            all_pred.extend(pred.detach().cpu().numpy())
             loss, n_correct, cnt = cal_loss(pred, label, device)
 
             total_loss += loss.item()
@@ -126,7 +130,7 @@ def eval_epoch(valid_loader, device, model, total_num):
     print('F1_i is : {F1_i}'.format(F1_i=F1_i))
     valid_loss = total_loss / total_num
     valid_acc = total_correct / total_num
-    return valid_loss, valid_acc, cnt_per_class, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4
+    return valid_loss, valid_acc, cnt_per_class, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4, all_pred, all_labels
 
 
 def test_epoch(valid_loader, device, model, total_num):
@@ -171,11 +175,11 @@ def test_epoch(valid_loader, device, model, total_num):
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_onlyeeg'
-    model_name = f'{emotion}_baseline_onlyeeg.chkpt'
+    model_name_base = 'baseline_onlyeeg_trans'
+    model_name = f'{emotion}_baseline_onlyeeg_trans.chkpt'
     
     # --- Preprocess
-    df = pd.read_csv('df.csv')
+    df = pd.read_csv(f'preprocessed_eeg/{patient}_mean.csv')
 
     X = df.drop([emotion], axis = 1)
     y= df[[emotion]]
@@ -191,13 +195,20 @@ if __name__ == '__main__':
     df_val = pd.concat([X_val, y_val], axis = 1)
 
     df_train_text = df_train[[emotion, 'new_words']]
-    df_train_eeg = df_train[eeg]
+    df_train_eeg_label = df_train[[emotion]]
+    df_train_eeg = df_train.iloc[:, 3:]
+    df_train_eeg = pd.concat([df_train_eeg_label, df_train_eeg], axis=1)
 
     df_val_text = df_val[[emotion, 'new_words']]
-    df_val_eeg = df_val[eeg]
+    df_val_eeg_label = df_val[[emotion]]
+    df_val_eeg = df_val.iloc[:, 3:]
+
+    df_val_eeg = pd.concat([df_val_eeg_label, df_val_eeg], axis=1)
 
     df_test_text = df_test[[emotion, 'new_words']]
-    df_test_eeg = df_test[eeg]
+    df_test_eeg_label = df_test[[emotion]]
+    df_test_eeg = df_test.iloc[:, 3:]
+    df_test_eeg = pd.concat([df_test_eeg_label, df_test_eeg], axis=1)
 
     # --- Save CSV
     df_train_text.to_csv('df_train_text.csv', header = None, index = False, index_label = False)
@@ -219,7 +230,6 @@ if __name__ == '__main__':
 
     df_test_text= pd.read_csv('df_test_text.csv', header = None).values
     df_test_eeg = pd.read_csv('df_test_eeg.csv', header = None).values
-
 
     for r in range(1):
         time_start_i = time.time()
@@ -284,16 +294,22 @@ if __name__ == '__main__':
         
         model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
+        model2 = Transformer2(device=device, d_feature=839, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        # model1 = nn.DataParallel(model1)
+        # model2 = nn.DataParallel(model2)
+        
+        # chkpt1 = torch.load(torchload, map_location = 'cuda')
+        # chkpt2 = torch.load(torchload2, map_location = 'cuda')
+
+        # model1.load_state_dict(chkpt1['model'])
+        # model2.load_state_dict(chkpt2['model'])
+
+        # model1 = Linear(device, 32, class_num)
+
+        # model2 = Linear(device, 839, class_num)
         model1 = nn.DataParallel(model1)
         model2 = nn.DataParallel(model2)
-        
-        chkpt1 = torch.load(torchload, map_location = 'cuda')
-        chkpt2 = torch.load(torchload2, map_location = 'cuda')
-
-        model1.load_state_dict(chkpt1['model'])
-        model2.load_state_dict(chkpt2['model'])
 
         model = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
 
@@ -306,7 +322,8 @@ if __name__ == '__main__':
         model = model.to(device)
 
 
-        # for param in model.parameters():
+        # for c in model.children():
+        #   for param in model.parameters():
         #     param.requires_grad = False
         
         optimizer = ScheduledOptim(
@@ -318,17 +335,25 @@ if __name__ == '__main__':
         eva_indis = []
         train_losses = []
         valid_losses = []
+        all_pred_train1 = []
+        all_label_train1=[]
+        all_pred_val1 = []
+        all_label_val1=[]
         
         for epoch_i in range(epoch):
             print('[ Epoch', epoch_i, ']')
             start = time.time()
-            train_loss, train_acc, train_cnt, train_cm = train_epoch(train_loader_text_eeg, device, model, optimizer, train_text_eeg.__len__())
+            train_loss, train_acc, train_cnt, train_cm, all_pred_train, all_label_train = train_epoch(train_loader_text_eeg, device, model, optimizer, train_text_eeg.__len__())
 
+            all_pred_train1.extend(all_pred_train)
+            all_label_train1.extend(all_label_train)
             train_accs.append(train_acc)
             train_losses.append(train_loss)
             start = time.time()
-            valid_loss, valid_acc, valid_cnt, valid_cm, eva_indi = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__())
+            valid_loss, valid_acc, valid_cnt, valid_cm, eva_indi, all_pred_val, all_label_val = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__())
 
+            all_pred_val1.extend(all_pred_val)
+            all_label_val1.extend(all_label_val)
             valid_accs.append(valid_acc)
             eva_indis.append(eva_indi)
             valid_losses.append(valid_loss)
@@ -354,7 +379,11 @@ if __name__ == '__main__':
                                                          elapse=(time.time() - start) / 60))
             print("valid_cm:", valid_cm)
         
-        
+        np.savetxt(f'baselines/DCCA_ds/{emotion}_{model_name_base}_all_pred_train.txt',all_pred_train1)
+        np.savetxt(f'baselines/DCCA_ds/{emotion}_{model_name_base}_all_label_train.txt',all_label_train1)
+        np.savetxt(f'baselines/DCCA_ds/{emotion}_{model_name_base}_all_pred_val.txt',all_pred_val1)
+        np.savetxt(f'baselines/DCCA_ds/{emotion}_{model_name_base}_all_label_val.txt',all_label_val1)
+
         print('ALL DONE')               
         time_consume = (time.time() - time_start_i)
         print('total ' + str(time_consume) + 'seconds')
@@ -382,18 +411,18 @@ if __name__ == '__main__':
         
 
         test_model_name = 'baselines/DCCA_ds/' + str(r) + model_name
-        model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
-                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
-                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        model1 = nn.DataParallel(model1)
-        model2 = nn.DataParallel(model2)
+        # model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
+        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        # model2 = Transformer2(device=device, d_feature=839, d_model=d_model, d_inner=d_inner,
+        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        # model1 = nn.DataParallel(model1)
+        # model2 = nn.DataParallel(model2)
         
-        chkpt1 = torch.load(torchload, map_location = 'cuda')
-        chkpt2 = torch.load(torchload2, map_location = 'cuda')
+        # chkpt1 = torch.load(torchload, map_location = 'cuda')
+        # chkpt2 = torch.load(torchload2, map_location = 'cuda')
 
-        model1.load_state_dict(chkpt1['model'])
-        model2.load_state_dict(chkpt2['model'])
+        # model1.load_state_dict(chkpt1['model'])
+        # model2.load_state_dict(chkpt2['model'])
         model = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
 
         chkpoint = torch.load(test_model_name, map_location='cuda')

@@ -29,13 +29,13 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
-FL = FocalLoss(class_num=2, gamma=1.5, average=False)
+FL = FocalLoss(class_num=3, gamma=1.5, average=False)
 tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 
 def cal_loss(pred, label, device):
 
-    cnt_per_class = np.zeros(2)
+    cnt_per_class = np.zeros(3)
 
     loss = F.cross_entropy(pred, label, reduction='sum')
     # loss = FL(pred, label, device)

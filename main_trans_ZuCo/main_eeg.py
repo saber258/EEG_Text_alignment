@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from model_new import Transformer
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset, Text_EEGDataset
+from dataset_new import EEGDataset, TextDataset, BalancedBatchSampler, Text_EEGDataset
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -24,6 +24,9 @@ import time
 import os
 from transformers import AutoTokenizer
 from imblearn.over_sampling import RandomOverSampler
+from numpy import inf
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
@@ -36,6 +39,7 @@ def cal_loss(pred, label, device):
     cnt_per_class = np.zeros(3)
 
     loss = F.cross_entropy(pred, label, reduction='sum')
+    # loss = FL(pred, label, device)
     pred = pred.max(1)[1]
     n_correct = pred.eq(label).sum().item()
     cnt_per_class = [cnt_per_class[j] + pred.eq(j).sum().item() for j in range(class_num)]
@@ -171,35 +175,41 @@ if __name__ == '__main__':
     model_name = f'{emotion}_baseline_onlyeeg.chkpt'
     
     # --- Preprocess
-    df = pd.read_csv('df.csv')
-    one_hot = pd.get_dummies(df[emotion])
+    df = pd.read_csv(f'preprocessed_eeg/{patient}_mean.csv')
 
-    df = df.drop('angry_trans', axis = 1)
-    df = df.join(one_hot)
     X = df.drop([emotion], axis = 1)
     y= df[[emotion]]
 
-    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.3, shuffle = True, stratify = y)
+    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.3, shuffle = True)
     ros = RandomOverSampler(random_state=2)
     X_resampled_text, y_resampled_text = ros.fit_resample(X_train, y_train)
 
-    
-
-    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True, stratify = y_val)
+    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True)
     df_test = pd.concat([X_test, y_test], axis = 1)
     df_train = pd.concat([X_resampled_text, y_resampled_text], axis = 1)
-    # df_train = pd.concat([X_train, y_train], axis = 1)
     df_train = df_train.sample(frac=1).reset_index(drop=True)
     df_val = pd.concat([X_val, y_val], axis = 1)
 
     df_train_text = df_train[[emotion, 'new_words']]
-    df_train_eeg = df_train[eeg]
+    df_train_eeg_label = df_train[[emotion]]
+    df_train_eeg = df_train.iloc[:, 3:]
+    df_train_eeg[df_train_eeg == -inf] = 0
+    df_train_eeg[df_train_eeg == inf] = 0
+    df_train_eeg = pd.concat([df_train_eeg_label, df_train_eeg], axis=1)
 
     df_val_text = df_val[[emotion, 'new_words']]
-    df_val_eeg = df_val[eeg]
+    df_val_eeg_label = df_val[[emotion]]
+    df_val_eeg = df_val.iloc[:, 3:]
+    df_val_eeg[df_val_eeg == -inf] = 0
+    df_val_eeg[df_val_eeg == inf] = 0
+    df_val_eeg = pd.concat([df_val_eeg_label, df_val_eeg], axis=1)
 
     df_test_text = df_test[[emotion, 'new_words']]
-    df_test_eeg = df_test[eeg]
+    df_test_eeg_label = df_test[[emotion]]
+    df_test_eeg = df_test.iloc[:, 3:]
+    df_test_eeg[df_test_eeg == -inf] = 0
+    df_test_eeg[df_test_eeg == inf] = 0
+    df_test_eeg = pd.concat([df_test_eeg_label, df_test_eeg], axis=1)
 
     # --- Save CSV
     df_train_text.to_csv('df_train_text.csv', header = None, index = False, index_label = False)
@@ -221,6 +231,7 @@ if __name__ == '__main__':
 
     df_test_text= pd.read_csv('df_test_text.csv', header = None).values
     df_test_eeg = pd.read_csv('df_test_eeg.csv', header = None).values
+
 
 
     for r in range(1):
@@ -266,6 +277,7 @@ if __name__ == '__main__':
         samples_weight = samples_weight.double()
         sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
 
+    
 
         # --- Loader
         train_loader_text_eeg = DataLoader(dataset=train_text_eeg,
@@ -281,9 +293,8 @@ if __name__ == '__main__':
                                   batch_size=batch_size,
                                   num_workers=2,
                                   shuffle=True)
-    
         
-        model = Transformer(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
+        model = Transformer(device=device, d_feature=839, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
 
         model = nn.DataParallel(model)
@@ -292,7 +303,7 @@ if __name__ == '__main__':
         
         optimizer = ScheduledOptim(
             Adam(filter(lambda x: x.requires_grad, model.parameters()),
-                 betas=(0.9, 0.98), eps=1e-4 ,lr = 1e-5, weight_decay = 1e-6), d_model, warm_steps)
+                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-5), d_model, warm_steps)
         
         train_accs = []
         valid_accs = []
@@ -363,7 +374,7 @@ if __name__ == '__main__':
         
 
         test_model_name = 'baselines/eeg/' + str(r) + model_name
-        model = Transformer(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
+        model = Transformer(device=device, d_feature=839, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout,
                             class_num=class_num)
         model = nn.DataParallel(model)

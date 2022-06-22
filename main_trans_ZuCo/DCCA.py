@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from model_new import Transformer, Transformer2
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset, Fusion, Text_EEGDataset
+from dataset_new import EEGDataset, TextDataset, Fusion, Text_EEGDataset, Linear
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -38,8 +38,11 @@ def cal_loss(pred1, label1, pred2, device):
 
     cnt_per_class = np.zeros(3)
 
-    loss = model.loss
-    loss = loss(pred1, pred2)
+    loss1 = model.loss
+    loss = loss1(pred1, pred2)
+    # loss2 = F.cross_entropy(pred1, label1, reduction = 'sum')
+    # loss3 = F.cross_entropy(pred2, label1, reduction = 'sum')
+    # loss = (loss1 + loss2 + loss3)/3
 
     pred1 = pred1.max(1)[1]
     pred2 = pred2.max(1)[1]
@@ -98,13 +101,14 @@ def train_epoch(train_loader1, device, model, optimizer, total_num, total_num2):
       all_pred2_train.extend(pred2.detach().cpu().numpy())
       
       loss, n_correct1 = cal_loss(pred1, label1, pred2, device)
-      
       loss.backward()
       optimizer.step_and_update_lr()
       total_loss += loss.item()
       total_correct += (n_correct1)
       
-    train_loss = total_loss / total_num 
+    total_loss1 = total_loss / total_num 
+    total_loss2 = total_loss/ total_num2
+    train_loss= total_loss1 + total_loss2
 
     return train_loss, all_pred_train, all_pred2_train, all_labels_train
 
@@ -137,7 +141,9 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
   
         total_loss += loss.item()
         total_correct += (n_correct1)
-    valid_loss = total_loss / total_num
+    total_loss1 = total_loss / total_num 
+    total_loss2 = total_loss/ total_num2
+    valid_loss= total_loss1 + total_loss2
     return valid_loss, all_pred_val, all_pred2_val, all_labels_val
 
 def test_epoch(valid_loader, device, model, total_num, total_num2):
@@ -175,39 +181,47 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
     np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_label_test.txt', all_labels)
     all_pred = np.array(all_pred)
     all_pred2 = np.array(all_pred2)
-    total_loss = total_loss / total_num 
+    total_loss1 = total_loss / total_num 
+    total_loss2 = total_loss/ total_num2
+    total_loss= total_loss1 + total_loss2
     print(f'Test loss: {total_loss}')
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_DCCA_only'
-    model_name = f'{emotion}_baseline_DCCA_only.chkpt'
+    model_name_base = 'baseline_DCCA_only_trans'
+    model_name = f'{emotion}_baseline_DCCA_only_trans.chkpt'
     
     # --- Preprocess
-    df = pd.read_csv('df.csv')
+    df = pd.read_csv(f'preprocessed_eeg/{patient}_mean.csv')
 
     X = df.drop([emotion], axis = 1)
     y= df[[emotion]]
 
-    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.5, stratify = y)
+    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.3, shuffle = True)
     ros = RandomOverSampler(random_state=2)
     X_resampled_text, y_resampled_text = ros.fit_resample(X_train, y_train)
 
-    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, stratify = y_val)
+    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True)
     df_test = pd.concat([X_test, y_test], axis = 1)
     df_train = pd.concat([X_resampled_text, y_resampled_text], axis = 1)
-    # df_train = pd.concat([X_train, y_train], axis = 1)
     df_train = df_train.sample(frac=1).reset_index(drop=True)
     df_val = pd.concat([X_val, y_val], axis = 1)
 
     df_train_text = df_train[[emotion, 'new_words']]
-    df_train_eeg = df_train[eeg]
+    df_train_eeg_label = df_train[[emotion]]
+    df_train_eeg = df_train.iloc[:, 3:]
+    df_train_eeg = pd.concat([df_train_eeg_label, df_train_eeg], axis=1)
 
     df_val_text = df_val[[emotion, 'new_words']]
-    df_val_eeg = df_val[eeg]
+    df_val_eeg_label = df_val[[emotion]]
+    df_val_eeg = df_val.iloc[:, 3:]
+
+    df_val_eeg = pd.concat([df_val_eeg_label, df_val_eeg], axis=1)
 
     df_test_text = df_test[[emotion, 'new_words']]
-    df_test_eeg = df_test[eeg]
+    df_test_eeg_label = df_test[[emotion]]
+    df_test_eeg = df_test.iloc[:, 3:]
+    df_test_eeg = pd.concat([df_test_eeg_label, df_test_eeg], axis=1)
 
     # --- Save CSV
     df_train_text.to_csv('df_train_text.csv', header = None, index = False, index_label = False)
@@ -293,23 +307,28 @@ if __name__ == '__main__':
         # --- model
         model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
+        model2 = Transformer2(device=device, d_feature=839, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        
+        # model1 = Linear(device, 32, 3)
+        # model2 = Linear(device, 839, 3)
+        
+        
         model1 = nn.DataParallel(model1)
         model2 = nn.DataParallel(model2)
         
-        chkpt1 = torch.load(torchload, map_location = 'cuda')
-        chkpt2 = torch.load(torchload2, map_location = 'cuda')
+        # chkpt1 = torch.load(torchload, map_location = 'cuda')
+        # chkpt2 = torch.load(torchload2, map_location = 'cuda')
 
-        model1.load_state_dict(chkpt1['model'])
-        model2.load_state_dict(chkpt2['model'])
+        # model1.load_state_dict(chkpt1['model'])
+        # model2.load_state_dict(chkpt2['model'])
 
         model = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
 
         
         optimizer = ScheduledOptim(
             Adam(filter(lambda x: x.requires_grad, model.parameters()),
-                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-5, weight_decay = 1e-6), d_model, warm_steps)
+                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-6, weight_decay = 1e-6), d_model, warm_steps)
         
         train_accs = []
         valid_accs = []
@@ -381,7 +400,7 @@ if __name__ == '__main__':
         plt.plot(train_losses, label = 'train')
         plt.plot(valid_losses, label= 'valid')
         plt.xlabel('epoch')
-        plt.ylim([-1, 1])
+        plt.ylim([-0.15, 0.1])
         plt.ylabel('loss')
         plt.legend(loc ="upper right")
         plt.title('loss change curve')
