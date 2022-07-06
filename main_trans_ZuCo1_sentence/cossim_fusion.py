@@ -39,10 +39,13 @@ def cal_loss(pred1, pred2, label1, out, device):
 
     cnt_per_class = np.zeros(3)
 
-    loss1 = model3.loss
-    loss1 = loss1(pred1, pred2)
+    loss2 = nn.CosineSimilarity()
+    loss2 = loss2(pred1, pred2)
+    loss2 = torch.sum(loss2)
+    # print(loss)
+    loss2 = -loss2
 
-    loss2 = F.cross_entropy(out, label1, reduction = 'sum')
+    loss1 = F.cross_entropy(out, label1, reduction = 'sum')
     loss = loss2 + loss1
     out = out.max(1)[1]
    
@@ -178,8 +181,8 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
         total_loss += loss.item()
         total_correct += (n_correct1)
 
-    np.savetxt(f'baselines/DCCA_fusion/{emotion}_{model_name_base}_all_pred.txt',all_pred)
-    np.savetxt(f'baselines/DCCA_fusion/{emotion}_{model_name_base}_all_label.txt', all_labels)
+    np.savetxt(f'baselines/fusion_cossim/{emotion}_{model_name_base}_all_pred.txt',all_pred)
+    np.savetxt(f'baselines/fusion_cossim/{emotion}_{model_name_base}_all_label.txt', all_labels)
     all_pred = np.array(all_pred)
     # plot_roc(all_labels,all_pred)
     cm = confusion_matrix(all_labels, all_res)
@@ -202,8 +205,8 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_DCCA_fusion_trans_test'
-    model_name = f'{emotion}_baseline_DCCA_fusion_trams_test.chkpt'
+    model_name_base = 'baseline_fusion_cossim_trans'
+    model_name = f'{emotion}_baseline_fusion_cossim_trans.chkpt'
     
     # --- Preprocess
     df = pd.read_csv(f'preprocessed_eeg/{patient}_mean.csv')
@@ -336,7 +339,7 @@ if __name__ == '__main__':
         model2 = model2.to(device)
         model1 = model1.to(device)
 
-        model3 = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
+        model3 = Fusion(model1, model2).to(device)
         # chkpt = torch.load(torchload3, map_location = 'cuda')
         # model3.load_state_dict(chkpt['model'])
 
@@ -350,7 +353,7 @@ if __name__ == '__main__':
         
         optimizer = ScheduledOptim(
             Adam(filter(lambda x: x.requires_grad, model.parameters()),
-                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-5, weight_decay=1e-2), d_model, warm_steps)
+                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-5, weight_decay=1e-5), d_model, warm_steps)
         
         train_accs = []
         valid_accs = []
@@ -386,7 +389,7 @@ if __name__ == '__main__':
 
 
             if eva_indi >= max(eva_indis):
-                torch.save(checkpoint, 'baselines/DCCA_fusion/' +str(r)+model_name)
+                torch.save(checkpoint, 'baselines/fusion_cossim/' +str(r)+model_name)
     
                 print('    - [Info] The checkpoint file has been updated.')
 
@@ -403,8 +406,8 @@ if __name__ == '__main__':
  
             
         
-        np.savetxt(f'baselines/DCCA_fusion/{emotion}_{model_name_base}_all_pred_val.txt',all_pred_val)
-        np.savetxt(f'baselines/DCCA_fusion/{emotion}_{model_name_base}_all_label_val.txt', all_labels_val)
+        np.savetxt(f'baselines/fusion_cossim/{emotion}_{model_name_base}_all_pred_val.txt',all_pred_val)
+        np.savetxt(f'baselines/fusion_cossim/{emotion}_{model_name_base}_all_label_val.txt', all_labels_val)
         print('ALL DONE')               
         time_consume = (time.time() - time_start_i)
         print('total ' + str(time_consume) + 'seconds')
@@ -412,12 +415,12 @@ if __name__ == '__main__':
         plt.plot(train_losses, label = 'train')
         plt.plot(valid_losses, label= 'valid')
         plt.xlabel('epoch')
-        plt.ylim([0.0, 2])
+        plt.ylim([-1, 1])
         plt.ylabel('loss')
         plt.legend(loc ="upper right")
         plt.title('loss change curve')
 
-        plt.savefig(f'baselines/DCCA_fusion/{emotion}_{model_name_base}results_%s_loss.png'%r)
+        plt.savefig(f'baselines/fusion_cossim/{emotion}_{model_name_base}results_%s_loss.png'%r)
 
         fig2 = plt.figure('Figure 2')
         plt.plot(train_accs, label = 'train')
@@ -428,34 +431,13 @@ if __name__ == '__main__':
         plt.legend(loc ="upper right")
         plt.title('accuracy change curve')
 
-        plt.savefig(f'baselines/DCCA_fusion/{emotion}_{model_name_base}results_%s_acc.png'%r)
+        plt.savefig(f'baselines/fusion_cossim/{emotion}_{model_name_base}results_%s_acc.png'%r)
         
 
-        test_model_name = 'baselines/DCCA_fusion/'+str(r) + model_name
+        test_model_name = 'baselines/fusion_cossim/'+str(r) + model_name
        
         chkpoint = torch.load(test_model_name, map_location='cuda')
-        # model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
-        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        # model2 = Transformer2(device=device, d_feature=839, d_model=d_model, d_inner=d_inner,
-        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        # model1 = nn.DataParallel(model1)
-        # model2 = nn.DataParallel(model2)
-        
-        # chkpt1 = torch.load(torchload, map_location = 'cuda')
-        # chkpt2 = torch.load(torchload2, map_location = 'cuda')
-
-        # model1.load_state_dict(chkpt1['model'])
-        # model2.load_state_dict(chkpt2['model'])
-
-
-        # model2 = model2.to(device)
-        # model1 = model1.to(device)
-
-        # model3 = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
-        # model = nn.DataParallel(model)
-        # chkpt = torch.load(torchload3, map_location = 'cuda')
-        # model3.load_state_dict(chkpt['model'])
-        # model = model.to(device)
+      
 
         model = DeepCCA_fusion(model3, outdim_size = outdim_size,d_feature = 6,
          d_model = d_model, d_inner = d_inner,n_layers = num_layers, n_head = num_heads, d_k=64, d_v=64, dropout = 0.5,

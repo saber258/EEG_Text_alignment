@@ -108,6 +108,7 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
 
     all_labels = []
     all_res = []
+    all_pred = []
     total_loss = 0
     total_correct = 0
     cnt_per_class = np.zeros(class_num)
@@ -122,6 +123,7 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
         pred1, _, _ = model(sig1, sig2)
         all_labels.extend(label1.cpu().numpy())
         all_res.extend(pred1.max(1)[1].cpu().numpy())
+        all_pred.extend(pred1.cpu().detach().numpy())
         loss, n_correct1, cnt1 = cal_loss(pred1, label1, device)
     
         
@@ -137,7 +139,7 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
     print('F1_i is : {F1_i}'.format(F1_i=F1_i))
     valid_loss = total_loss / total_num 
     valid_acc = total_correct /total_num 
-    return valid_loss, valid_acc, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4
+    return valid_loss, valid_acc, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4, all_pred, all_labels
 
 
 def test_epoch(valid_loader, device, model, total_num, total_num2):
@@ -180,33 +182,39 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_fusion_trans'
-    model_name = f'{emotion}_baseline_fusion_trans.chkpt'
+    model_name_base = 'baseline_fusion_linout'
+    model_name = f'{emotion}_baseline_fusion_linout.chkpt'
     
     # --- Preprocess
-    df = pd.read_csv('df.csv')
+    df = pd.read_csv(f'preprocessed_eeg/{patient}_mean.csv')
 
     X = df.drop([emotion], axis = 1)
     y= df[[emotion]]
 
-    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.3, shuffle = True, stratify = y)
+    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.3, shuffle = True)
     ros = RandomOverSampler(random_state=2)
     X_resampled_text, y_resampled_text = ros.fit_resample(X_train, y_train)
 
-    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True, stratify = y_val)
+    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True)
     df_test = pd.concat([X_test, y_test], axis = 1)
     df_train = pd.concat([X_resampled_text, y_resampled_text], axis = 1)
     df_train = df_train.sample(frac=1).reset_index(drop=True)
     df_val = pd.concat([X_val, y_val], axis = 1)
 
     df_train_text = df_train[[emotion, 'new_words']]
-    df_train_eeg = df_train[eeg]
+    df_train_eeg_label = df_train[[emotion]]
+    df_train_eeg = df_train.iloc[:, 3:]
+    df_train_eeg = pd.concat([df_train_eeg_label, df_train_eeg], axis=1)
 
     df_val_text = df_val[[emotion, 'new_words']]
-    df_val_eeg = df_val[eeg]
+    df_val_eeg_label = df_val[[emotion]]
+    df_val_eeg = df_val.iloc[:, 3:]
+    df_val_eeg = pd.concat([df_val_eeg_label, df_val_eeg], axis=1)
 
     df_test_text = df_test[[emotion, 'new_words']]
-    df_test_eeg = df_test[eeg]
+    df_test_eeg_label = df_test[[emotion]]
+    df_test_eeg = df_test.iloc[:, 3:]
+    df_test_eeg = pd.concat([df_test_eeg_label, df_test_eeg], axis=1)
 
     # --- Save CSV
     df_train_text.to_csv('df_train_text.csv', header = None, index = False, index_label = False)
@@ -290,16 +298,16 @@ if __name__ == '__main__':
         
         model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
+        model2 = Transformer2(device=device, d_feature=838, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
         model1 = nn.DataParallel(model1)
         model2 = nn.DataParallel(model2)
         
-        chkpt1 = torch.load(torchload, map_location = 'cuda')
-        chkpt2 = torch.load(torchload2, map_location = 'cuda')
+        # chkpt1 = torch.load(torchload, map_location = 'cuda')
+        # chkpt2 = torch.load(torchload2, map_location = 'cuda')
 
-        model1.load_state_dict(chkpt1['model'])
-        model2.load_state_dict(chkpt2['model'])
+        # model1.load_state_dict(chkpt1['model'])
+        # model2.load_state_dict(chkpt2['model'])
 
 
         model2 = model2.to(device)
@@ -315,13 +323,15 @@ if __name__ == '__main__':
         
         optimizer = ScheduledOptim(
             Adam(filter(lambda x: x.requires_grad, model.parameters()),
-                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-2, weight_decay = 1e-5), d_model, warm_steps)
+                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-5, weight_decay = 1e-2), d_model, warm_steps)
         
         train_accs = []
         valid_accs = []
         eva_indis = []
         train_losses = []
         valid_losses = []
+        all_pred_val = []
+        all_labels_val = []
         
         for epoch_i in range(epoch):
             print('[ Epoch', epoch_i, ']')
@@ -332,8 +342,10 @@ if __name__ == '__main__':
             train_accs.append(train_acc)
             train_losses.append(train_loss)
             start = time.time()
-            valid_loss, valid_acc, valid_cm, eva_indi = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__(), val_text_eeg.__len__())
+            valid_loss, valid_acc, valid_cm, eva_indi, val_pred, val_label = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__(), val_text_eeg.__len__())
 
+            all_pred_val.extend(val_pred)
+            all_labels_val.extend(val_label)
             valid_accs.append(valid_acc)
             eva_indis.append(eva_indi)
             valid_losses.append(valid_loss)
@@ -361,7 +373,8 @@ if __name__ == '__main__':
                                                          elapse=(time.time() - start) / 60))
             print("valid_cm:", valid_cm)
         
-        
+        np.savetxt(f'baselines/text_eeg_fusion/{emotion}_{model_name_base}_all_pred_val.txt',all_pred_val)
+        np.savetxt(f'baselines/text_eeg_fusion/{emotion}_{model_name_base}_all_label_val.txt', all_labels_val)
         print('ALL DONE')               
         time_consume = (time.time() - time_start_i)
         print('total ' + str(time_consume) + 'seconds')

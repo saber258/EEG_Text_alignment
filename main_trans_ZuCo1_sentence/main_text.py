@@ -102,6 +102,7 @@ def train_epoch(train_loader, device, model, optimizer, total_num):
 def eval_epoch(valid_loader, device, model, total_num):
     all_labels = []
     all_res = []
+    all_pred = []
     model.eval()
     total_loss = 0
     total_correct = 0
@@ -112,6 +113,7 @@ def eval_epoch(valid_loader, device, model, total_num):
             pred = model(sig)
             all_labels.extend(label.cpu().numpy())
             all_res.extend(pred.max(1)[1].cpu().numpy())
+            all_pred.extend(pred.cpu().detach().numpy())
             loss, n_correct, cnt = cal_loss(pred, label, device)
 
             total_loss += loss.item()
@@ -125,7 +127,7 @@ def eval_epoch(valid_loader, device, model, total_num):
     print('F1_i is : {F1_i}'.format(F1_i=F1_i))
     valid_loss = total_loss / total_num
     valid_acc = total_correct / total_num
-    return valid_loss, valid_acc, cnt_per_class, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4
+    return valid_loss, valid_acc, cnt_per_class, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4, all_pred, all_labels
 
 
 def test_epoch(valid_loader, device, model, total_num):
@@ -180,12 +182,14 @@ if __name__ == '__main__':
     y= df[[emotion]]
 
     X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.3, shuffle = True)
-    ros = RandomOverSampler(random_state=2)
+    ros = RandomOverSampler(random_state=2, sampling_strategy = 'all')
     X_resampled_text, y_resampled_text = ros.fit_resample(X_train, y_train)
 
     X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True)
     df_test = pd.concat([X_test, y_test], axis = 1)
     df_train = pd.concat([X_resampled_text, y_resampled_text], axis = 1)
+    # df_train = pd.concat([X_train, y_train], axis = 1)
+
     df_train = df_train.sample(frac=1).reset_index(drop=True)
     df_val = pd.concat([X_val, y_val], axis = 1)
 
@@ -275,6 +279,7 @@ if __name__ == '__main__':
         train_loader_text_eeg = DataLoader(dataset=train_text_eeg,
                                   batch_size=batch_size,
                                   num_workers=2,
+                                  # shuffle = True)
                                   sampler = sampler)
 
         valid_loader_text_eeg = DataLoader(dataset=val_text_eeg,
@@ -286,7 +291,7 @@ if __name__ == '__main__':
                                   num_workers=2,
                                   shuffle=True)
         
-        model = Transformer(device=device, d_feature=25, d_model=d_model, d_inner=d_inner,
+        model = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
 
         model = nn.DataParallel(model)
@@ -295,13 +300,15 @@ if __name__ == '__main__':
         
         optimizer = ScheduledOptim(
             Adam(filter(lambda x: x.requires_grad, model.parameters()),
-                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-5), d_model, warm_steps)
+                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-5, weight_decay=1e-2), d_model, warm_steps)
         
         train_accs = []
         valid_accs = []
         eva_indis = []
         train_losses = []
         valid_losses = []
+        val_pred = []
+        val_label = []
         
         for epoch_i in range(epoch):
             print('[ Epoch', epoch_i, ']')
@@ -311,8 +318,10 @@ if __name__ == '__main__':
             train_accs.append(train_acc)
             train_losses.append(train_loss)
             start = time.time()
-            valid_loss, valid_acc, valid_cnt, valid_cm, eva_indi = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__())
+            valid_loss, valid_acc, valid_cnt, valid_cm, eva_indi, all_pred_val, all_label_val = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__())
 
+            val_pred.extend(all_pred_val)
+            val_label.extend(all_label_val)
             valid_accs.append(valid_acc)
             eva_indis.append(eva_indi)
             valid_losses.append(valid_loss)
@@ -338,7 +347,8 @@ if __name__ == '__main__':
                                                          elapse=(time.time() - start) / 60))
             print("valid_cm:", valid_cm)
         
-        
+        np.savetxt(f'baselines/text/{emotion}_{model_name_base}_all_pred_val.txt',val_pred)
+        np.savetxt(f'baselines/text/{emotion}_{model_name_base}_all_label_val.txt', val_label)
         print('ALL DONE')               
         time_consume = (time.time() - time_start_i)
         print('total ' + str(time_consume) + 'seconds')
@@ -366,7 +376,7 @@ if __name__ == '__main__':
         
 
         test_model_name = 'baselines/text/' + str(r) + model_name
-        model = Transformer(device=device, d_feature=25, d_model=d_model, d_inner=d_inner,
+        model = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout,
                             class_num=class_num)
         model = nn.DataParallel(model)

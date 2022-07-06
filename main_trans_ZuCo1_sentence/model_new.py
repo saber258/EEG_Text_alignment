@@ -125,7 +125,7 @@ class Transformer(nn.Module):
     def __init__(
             self, device,
             d_feature, d_model, d_inner,
-            n_layers, n_head, d_k=64, d_v=64, dropout = 0.5,
+            n_layers, n_head, d_k=64, d_v=64, dropout = 0.1,
             class_num=3):
 
         super().__init__()
@@ -137,6 +137,9 @@ class Transformer(nn.Module):
         self.linear1_linear = nn.Linear(d_model, class_num)
         self.linear2_cov = nn.Conv1d(d_model, 1, kernel_size=1)
         self.linear2_linear = nn.Linear(d_feature, class_num)
+        self.bn=nn.BatchNorm1d(d_feature)
+        self.bn2=nn.BatchNorm1d(16) #batch
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, src_seq):
         b, l = src_seq.size()
@@ -147,11 +150,15 @@ class Transformer(nn.Module):
         src_pos = src_pos.to(self.device)
 
         enc_output, *_ = self.encoder(src_seq, src_pos)
+        # print(enc_output.shape)
+        # enc_output = self.bn(enc_output)
         
-        dec_output = enc_output
-        res = self.linear1_cov(dec_output)
+        res = self.linear1_cov(enc_output)
         res = res.contiguous().view(res.size()[0], -1)
+        # res = self.bn2(res)
+        # res = self.dropout(res)
         res = self.linear1_linear(res)
+        # print(res.shape)
         return res
 
 
@@ -160,7 +167,7 @@ class Transformer2(nn.Module):
     def __init__(
             self, device,
             d_feature, d_model, d_inner,
-            n_layers, n_head, d_k=64, d_v=64, dropout = 0.5,
+            n_layers, n_head, d_k=64, d_v=64, dropout = 0.1,
             class_num=3):
 
         super().__init__()
@@ -172,19 +179,28 @@ class Transformer2(nn.Module):
         self.linear1_linear = nn.Linear(d_model, class_num)
         self.linear2_cov = nn.Conv1d(d_model, 1, kernel_size=1)
         self.linear2_linear = nn.Linear(d_feature, class_num)
+        self.bn=nn.BatchNorm1d(d_feature)
+        self.bn2=nn.BatchNorm1d(16) #d_model
+        self.dropout = nn.Dropout(0.2)
 
     def forward(self, src_seq):
         b, l = src_seq.size()
+     
         src_pos = torch.LongTensor(
             [list(range(1, l + 1)) for i in range(b)]
         )
         src_pos = src_pos.to(self.device)
 
         enc_output, *_ = self.encoder(src_seq, src_pos)
-        dec_output = enc_output
-        res = self.linear1_cov(dec_output)
+        # print(enc_output.shape)
+        # enc_output = self.bn(enc_output)
+        
+        res = self.linear1_cov(enc_output)
         res = res.contiguous().view(res.size()[0], -1)
+        # res = self.bn2(res)
+        # res = self.dropout(res)
         res = self.linear1_linear(res)
+        # print(res.shape)
         return res
 
 
@@ -193,7 +209,7 @@ class Transformer3(nn.Module):
     def __init__(
             self, device,
             d_feature, d_model, d_inner,
-            n_layers, n_head, d_k=64, d_v=64, dropout = 0.5,
+            n_layers, n_head, d_k=64, d_v=64, dropout = 0.1,
             class_num=3):
 
         super().__init__()
@@ -205,17 +221,26 @@ class Transformer3(nn.Module):
         self.linear1_linear = nn.Linear(d_model, class_num)
         self.linear2_cov = nn.Conv1d(d_model, 1, kernel_size=1)
         self.linear2_linear = nn.Linear(d_feature, class_num)
+        self.bn=nn.BatchNorm1d(d_feature)
+        self.bn2=nn.BatchNorm1d(16) #batch
+        self.dropout = nn.Dropout(0.2)
 
     def forward(self, src_seq):
         b, l = src_seq.size()
+     
         src_pos = torch.LongTensor(
             [list(range(1, l + 1)) for i in range(b)]
         )
         src_pos = src_pos.to(self.device)
 
         enc_output, *_ = self.encoder(src_seq, src_pos)
-        dec_output = enc_output
-        res = self.linear1_cov(dec_output)
+        # print(enc_output.shape)
+        # enc_output = self.bn(enc_output)
+        
+        res = self.linear1_cov(enc_output)
         res = res.contiguous().view(res.size()[0], -1)
-        res = self.linear1_linear(F.relu(res))
+        # res = self.bn2(res)
+        # res = self.dropout(res)
+        res = self.linear1_linear(res)
+        # print(res.shape)
         return res

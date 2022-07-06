@@ -12,7 +12,6 @@ from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
-from transformers.utils.dummy_pt_objects import OpenAIGPTForSequenceClassification
 from model_new import Transformer, Transformer2
 from optim_new import ScheduledOptim
 from dataset_new import EEGDataset, TextDataset, Fusion, Text_EEGDataset, Linear
@@ -26,7 +25,10 @@ import time
 import os
 from transformers import AutoTokenizer
 from imblearn.over_sampling import RandomOverSampler
-from CCA import cca_loss, DeepCCA, DeepCCA_fusion
+from CCA import cca_loss, DeepCCA
+from scipy.stats import wasserstein_distance
+import matplotlib.pylab as pl
+
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
@@ -35,19 +37,23 @@ tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 
 
-def cal_loss(pred1, pred2, label1, out, device):
+def cal_loss(pred1, label1, pred2, device):
 
     cnt_per_class = np.zeros(3)
 
-    loss1 = model3.loss
-    loss1 = loss1(pred1, pred2)
+    loss2 = F.cross_entropy(pred1, label1, reduction = 'sum')
+    loss1 = wasserstein_distance(pred1.cpu().detach().numpy().flatten(), 
+    pred2.cpu().detach().numpy().flatten())
 
-    loss2 = F.cross_entropy(out, label1, reduction = 'sum')
-    loss = loss2 + loss1
-    out = out.max(1)[1]
+    loss1 = torch.tensor(loss1, requires_grad=True)
+    
+    pred1 = pred1.max(1)[1]
+    pred2 = pred2.max(1)[1]
    
-    n_correct2 = out.eq(label1).sum().item()
-    n_correct = n_correct2
+    # loss = loss1 + loss2
+    loss = loss1 + loss2
+    n_correct3 = pred1.eq(label1).sum().item()
+    n_correct = n_correct3
     return loss, n_correct
 
 
@@ -78,38 +84,41 @@ def train_epoch(train_loader1, device, model, optimizer, total_num, total_num2):
     model.train()
     all_labels = []
     all_res = []
-    all_res2 = []
+    all_pred = []
+    all_pred2 = []
+   
     total_loss = 0
     total_correct = 0
     #cnt_per_class = np.zeros(class_num)
 
   
-    for batch in tqdm(train_loader1, mininterval=100, desc='- (Training)  ', leave=False): 
+    for batch in tqdm(train_loader1, mininterval=0.5, desc='- (Training)  ', leave=False):
 
       sig2, sig1, label1, = map(lambda x: x.to(device), batch)
 
       
       optimizer.zero_grad()
-      out, x1, x2 = model(sig1, sig2)
+      pred1, pred2 = model(sig1, sig2)
       all_labels.extend(label1.cpu().numpy())
-  
-      all_res.extend(out.max(1)[1].cpu().numpy())
-      loss, n_correct1 = cal_loss(x1, x2, label1, out, device)
+      all_res.extend(pred1.max(1)[1].cpu().numpy())
+      all_pred.extend(pred1.cpu().detach().numpy())
+    
+      loss, n_correct1 = cal_loss(pred1, label1, pred2, device)
+      
       
       loss.backward()
       optimizer.step_and_update_lr()
       total_loss += loss.item()
       total_correct += (n_correct1)
   
-    #cnt_per_class += (cnt1 + cnt2)
   
       cm = confusion_matrix(all_labels, all_res)
+      
 
+    train_loss = total_loss / total_num
+    train_acc = total_correct / total_num
 
-    train_loss = total_loss / total_num#+ total_num2)
-    train_acc = total_correct / total_num# + total_num2)
-
-    return train_loss, train_acc, cm
+    return train_loss, train_acc, cm, all_pred
 
 
 def eval_epoch(valid_loader1, device, model, total_num, total_num2):
@@ -118,92 +127,85 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
     all_labels = []
     all_res = []
     all_pred = []
+    all_pred2 = []
+
     total_loss = 0
     total_correct = 0
-    cnt_per_class = np.zeros(class_num)
 
     with torch.no_grad():
      
-      for batch in tqdm(valid_loader1, mininterval=100, desc='- (Training)  ', leave=False): 
+      for batch in tqdm(valid_loader1, mininterval=0.5, desc='- (Validation)  ', leave=False):
 
         sig2, sig1, label1, = map(lambda x: x.to(device), batch)
       
-        out, x1, x2 = model(sig1, sig2)
+        pred1, pred2 = model(sig1, sig2)
         all_labels.extend(label1.cpu().numpy())
-        all_res.extend(out.max(1)[1].cpu().numpy())
-        all_pred.extend(out.cpu().detach().numpy())
-        loss, n_correct1 = cal_loss(x1, x2, label1, out, device)
+        all_res.extend(pred1.max(1)[1].cpu().numpy())
+        loss, n_correct1 = cal_loss(pred1, label1, pred2,device)
+        all_pred.extend(pred1.cpu().detach().numpy())
 
   
         total_loss += loss.item()
         total_correct += (n_correct1)
 
     cm = confusion_matrix(all_labels, all_res)
-
     acc_SP, pre_i, rec_i, F1_i = cal_statistic(cm)
-   
-
     print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP))
     print('pre_i is : {pre_i}'.format(pre_i=pre_i))
     print('rec_i is : {rec_i}'.format(rec_i=rec_i))
     print('F1_i is : {F1_i}'.format(F1_i=F1_i))
-    valid_loss = total_loss / total_num #+ total_num2)
-    valid_acc = total_correct / total_num #+ total_num2)
-    return valid_loss, valid_acc, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4, all_pred, all_labels
+    valid_loss = total_loss / total_num
+    valid_acc = total_correct / total_num
+    return valid_loss, valid_acc, cm,sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4, all_pred, all_labels
 
 
 def test_epoch(valid_loader, device, model, total_num, total_num2):
     all_labels = []
     all_res = []
     all_pred = []
-
+    all_pred2 = []
     model.eval()
     total_loss = 0
     total_correct = 0
-    cnt_per_class = np.zeros(class_num)
     with torch.no_grad():
      
-      for batch in tqdm(valid_loader, mininterval=100, desc='- (Training)  ', leave=False): 
+      for batch in tqdm(valid_loader, mininterval=0.5, desc='- (Validation)  ', leave=False):
 
         sig2, sig1, label1, = map(lambda x: x.to(device), batch)
-        out, x1, x2 = model(sig1, sig2)  
+        pred1, pred2 = model(sig1, sig2)  
         all_labels.extend(label1.cpu().numpy())
-      
-        all_res.extend(out.max(1)[1].cpu().numpy())
-  
-        all_pred.extend(out.cpu().numpy())
-        loss, n_correct1 = cal_loss(x1, x2, label1, out, device)
+        all_res.extend(pred1.max(1)[1].cpu().numpy())
+        all_pred.extend(pred1.cpu().numpy())
+        loss, n_correct1 = cal_loss(pred1, label1, pred2, device)
 
 
         total_loss += loss.item()
         total_correct += (n_correct1)
 
-    np.savetxt(f'baselines/DCCA_fusion/{emotion}_{model_name_base}_all_pred.txt',all_pred)
-    np.savetxt(f'baselines/DCCA_fusion/{emotion}_{model_name_base}_all_label.txt', all_labels)
-    all_pred = np.array(all_pred)
-    # plot_roc(all_labels,all_pred)
-    cm = confusion_matrix(all_labels, all_res)
+    np.savetxt(f'baselines/fusion_wd_ds/{emotion}_{model_name_base}_all_pred.txt',all_pred)
+    # np.savetxt(f'baselines/fusion_wd/{emotion}_{model_name_base}_all_pred2.txt',all_pred2)
 
+    np.savetxt(f'baselines/fusion_wd_ds/{emotion}_{model_name_base}_all_label.txt', all_labels)
+    all_pred = np.array(all_pred)
+    plot_roc(all_labels,all_pred)
+    cm = confusion_matrix(all_labels, all_res)
     print("test_cm:", cm)
 
-    
     acc_SP, pre_i, rec_i, F1_i = cal_statistic(cm)
-   
-  
+
     print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP))
     print('pre_i is : {pre_i}'.format(pre_i=pre_i))
     print('rec_i is : {rec_i}'.format(rec_i=rec_i))
     print('F1_i is : {F1_i}'.format(F1_i=F1_i))
-    
-    test_loss = total_loss / total_num#+ total_num2)
-    test_acc = total_correct / total_num# + total_num2)
+    test_acc = total_correct / total_num 
     print('test_acc is : {test_acc}'.format(test_acc=test_acc))
-    print(f'Test loss: {test_loss}')
+    total_loss = total_loss / total_num
+    print(f'Test loss: {total_loss}')
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_DCCA_fusion_trans_test'
-    model_name = f'{emotion}_baseline_DCCA_fusion_trams_test.chkpt'
+    model_name_base = 'baseline_fusion_wd_text_trans'
+    model_name = f'{emotion}_baseline_fusion_wd_text_trans.chkpt'
     
     # --- Preprocess
     df = pd.read_csv(f'preprocessed_eeg/{patient}_mean.csv')
@@ -321,8 +323,6 @@ if __name__ == '__main__':
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
         model2 = Transformer2(device=device, d_feature=838, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        # model1 = Linear(device, d_feature=32, class_num = 3)
-        # model2 = Linear(device, d_feature = 839, class_num=3)
         model1 = nn.DataParallel(model1)
         model2 = nn.DataParallel(model2)
         
@@ -332,48 +332,54 @@ if __name__ == '__main__':
         # model1.load_state_dict(chkpt1['model'])
         # model2.load_state_dict(chkpt2['model'])
 
+        # model1 = Linear(device, 32, class_num)
+        # model2 = Linear(device, 839, class_num)
+        
+        
+        # model1 = nn.DataParallel(model1)
+        # model2 = nn.DataParallel(model2)
+
 
         model2 = model2.to(device)
         model1 = model1.to(device)
 
-        model3 = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
-        # chkpt = torch.load(torchload3, map_location = 'cuda')
-        # model3.load_state_dict(chkpt['model'])
-
-        model = DeepCCA_fusion(model3, outdim_size = outdim_size, use_all_singular_values = False, d_feature = 6, d_model = d_model, d_inner = d_inner,
-            n_layers=num_layers, n_head = num_heads, d_k=64, d_v=64, dropout = 0.1,
-            class_num=3, device=torch.device('cuda'))
-        # model = nn.DataParallel(model)
-        
-        model= model.to(device)
+        model = Fusion(model1, model2).to(device)
+        # chkpt = torch.load(torchload3, map_location='cuda')
+        # model.load_state_dict(chkpt['model'])
+      
 
         
         optimizer = ScheduledOptim(
             Adam(filter(lambda x: x.requires_grad, model.parameters()),
-                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-5, weight_decay=1e-2), d_model, warm_steps)
+                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-4, weight_decay=1e-5), d_model, warm_steps)
         
         train_accs = []
         valid_accs = []
         eva_indis = []
         train_losses = []
         valid_losses = []
-        all_pred_val = []
-        all_labels_val = []
+        pred_val = []
+        pred2_val = []
+        pred_train = []
+        pred2_train = []
+        label_val = []
         
         for epoch_i in range(epoch):
             print('[ Epoch', epoch_i, ']')
             start = time.time()
-            train_loss, train_acc, train_cm= train_epoch(train_loader_text_eeg, device, model, optimizer, train_text_eeg.__len__(), train_text_eeg.__len__())
+            train_loss, train_acc, train_cm, all_pred_train = train_epoch(train_loader_text_eeg, device, model, optimizer, train_text_eeg.__len__(), train_text_eeg.__len__())
       
 
             train_accs.append(train_acc)
             train_losses.append(train_loss)
-            start = time.time()
-            valid_loss, valid_acc, valid_cm, eva_indi, val_pred, val_label = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__(), val_text_eeg.__len__())
+            pred_train.extend(all_pred_train)
 
-            all_pred_val.extend(val_pred)
-            all_labels_val.extend(val_label)
+            start = time.time()
+            valid_loss, valid_acc, valid_cm, eva_indi, all_pred_val, all_label_val = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__(), val_text_eeg.__len__())
+
             valid_accs.append(valid_acc)
+            label_val.extend(all_label_val)
+            pred_val.extend(all_pred_val)
             eva_indis.append(eva_indi)
             valid_losses.append(valid_loss)
 
@@ -386,7 +392,7 @@ if __name__ == '__main__':
 
 
             if eva_indi >= max(eva_indis):
-                torch.save(checkpoint, 'baselines/DCCA_fusion/' +str(r)+model_name)
+                torch.save(checkpoint, 'baselines/fusion_wd_ds/'+str(r)+model_name)
     
                 print('    - [Info] The checkpoint file has been updated.')
 
@@ -395,16 +401,20 @@ if __name__ == '__main__':
                       'elapse: {elapse:3.3f} min'.format(loss=train_loss, accu=100 * train_acc,
                                                          elapse=(time.time() - start) / 60))
             print("train_cm:", train_cm)
-   
+           
             print('  - (Validation)  loss: {loss: 8.5f}, accuracy: {accu:3.3f} %, '
                       'elapse: {elapse:3.3f} min'.format(loss=valid_loss, accu=100 * valid_acc,
                                                          elapse=(time.time() - start) / 60))
             print("valid_cm:", valid_cm)
- 
-            
         
-        np.savetxt(f'baselines/DCCA_fusion/{emotion}_{model_name_base}_all_pred_val.txt',all_pred_val)
-        np.savetxt(f'baselines/DCCA_fusion/{emotion}_{model_name_base}_all_label_val.txt', all_labels_val)
+            
+
+        
+    
+
+        np.savetxt(f'baselines/fusion_wd_ds/{emotion}_{model_name_base}_all_pred_val.txt',pred_val)
+        # np.savetxt(f'baselines/fusion_wd/{emotion}_{model_name_base}_all_pred2_val.txt',pred2_val)
+        np.savetxt(f'baselines/fusion_wd_ds/{emotion}_{model_name_base}_all_labels_val.txt',label_val)
         print('ALL DONE')               
         time_consume = (time.time() - time_start_i)
         print('total ' + str(time_consume) + 'seconds')
@@ -412,12 +422,12 @@ if __name__ == '__main__':
         plt.plot(train_losses, label = 'train')
         plt.plot(valid_losses, label= 'valid')
         plt.xlabel('epoch')
-        plt.ylim([0.0, 2])
+        plt.ylim([0.0, 1])
         plt.ylabel('loss')
         plt.legend(loc ="upper right")
         plt.title('loss change curve')
 
-        plt.savefig(f'baselines/DCCA_fusion/{emotion}_{model_name_base}results_%s_loss.png'%r)
+        plt.savefig(f'baselines/fusion_wd_ds/{emotion}_{model_name_base}results_%s_loss.png'%r)
 
         fig2 = plt.figure('Figure 2')
         plt.plot(train_accs, label = 'train')
@@ -428,38 +438,12 @@ if __name__ == '__main__':
         plt.legend(loc ="upper right")
         plt.title('accuracy change curve')
 
-        plt.savefig(f'baselines/DCCA_fusion/{emotion}_{model_name_base}results_%s_acc.png'%r)
+        plt.savefig(f'baselines/fusion_wd_ds/{emotion}_{model_name_base}results_%s_acc.png'%r)
         
 
-        test_model_name = 'baselines/DCCA_fusion/'+str(r) + model_name
-       
+        test_model_name = 'baselines/fusion_wd_ds/'+str(r) + model_name
         chkpoint = torch.load(test_model_name, map_location='cuda')
-        # model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
-        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        # model2 = Transformer2(device=device, d_feature=839, d_model=d_model, d_inner=d_inner,
-        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        # model1 = nn.DataParallel(model1)
-        # model2 = nn.DataParallel(model2)
-        
-        # chkpt1 = torch.load(torchload, map_location = 'cuda')
-        # chkpt2 = torch.load(torchload2, map_location = 'cuda')
-
-        # model1.load_state_dict(chkpt1['model'])
-        # model2.load_state_dict(chkpt2['model'])
-
-
-        # model2 = model2.to(device)
-        # model1 = model1.to(device)
-
-        # model3 = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
-        # model = nn.DataParallel(model)
-        # chkpt = torch.load(torchload3, map_location = 'cuda')
-        # model3.load_state_dict(chkpt['model'])
-        # model = model.to(device)
-
-        model = DeepCCA_fusion(model3, outdim_size = outdim_size,d_feature = 6,
-         d_model = d_model, d_inner = d_inner,n_layers = num_layers, n_head = num_heads, d_k=64, d_v=64, dropout = 0.5,
-            class_num=3, use_all_singular_values = False).to(device)
+        model = Fusion(model1, model2)
         model.load_state_dict(chkpoint['model'])
         model = model.to(device)
         test_epoch(test_loader_text_eeg, device, model, test_text_eeg.__len__(), test_text_eeg.__len__())

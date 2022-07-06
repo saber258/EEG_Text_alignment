@@ -8,7 +8,7 @@ from config import *
 import torch.nn.functional as F
 from torch.utils.data.sampler import BatchSampler
 from model_new import Encoder, Encoder2, Transformer, Transformer3, Encoder3
-
+import scipy.stats as stats
 
 class EEGDataset(Dataset):
     def __init__(self, signal, label):
@@ -95,7 +95,7 @@ class Text_EEGDataset(Dataset):
 
     input_ids = [self.tokenizer.encode(text, add_special_tokens=False,max_length=MAX_LEN, padding = 'max_length', truncation = True, return_token_type_ids = False, return_attention_mask = True)]   
     input_ids = np.array(input_ids)
-    input_ids = input_ids/np.linalg.norm(input_ids)
+    input_ids = stats.zscore(input_ids, axis=None, nan_policy='omit')
     return signal, torch.FloatTensor(input_ids).flatten(), torch.tensor(label, dtype=torch.long)
 
 
@@ -104,49 +104,78 @@ class Linear(nn.Module):
       super(Linear, self).__init__()
 
       # self.linear1_cov = nn.Conv1d(d_feature, 1, kernel_size=1)
-      self.batchnorm = nn.BatchNorm1d(d_feature, affine = False)
-      self.linear1_linear = nn.Linear(d_feature, 256)
-      self.hidden = nn.Linear(256, 128)
-      self.classifier = nn.Linear(128, class_num)
+      self.batchnorm = nn.BatchNorm1d(128)
+      self.bn = nn.BatchNorm1d(64)
+      self.linear1_linear = nn.Linear(d_feature, 128)
+      self.hidden = nn.Linear(128, 64)
+      self.dropout = nn.Dropout(0.25)
+      self.classifier = nn.Linear(64, class_num)
   def forward(self,x1):
     # x1 = self.linear1_cov(x1)
-    x1 = self.batchnorm(x1)
     # x1 = x1.contiguous().view(x1.size()[0], -1)
     x1 = self.linear1_linear(x1)
+    x1 = self.batchnorm(x1)
+    x1 = self.dropout(x1)
     x1 = self.hidden(x1)
+    x1 = self.bn(x1)
+    x1 = self.dropout(x1)
     out = self.classifier(F.relu(x1))
 
     return out
 
 
-class Fusion(nn.Module):
-  def __init__(self, device, model1, model2,
-            d_feature, d_model, d_inner,
-            n_layers, n_head, d_k=64, d_v=64, dropout = 0.5,
-            class_num=3):
-    super(Fusion, self).__init__()
-    self.device = device
-    self.model1 = model1
-    self.model2 = model2
-    self.Transformer = Transformer3(device=device, d_feature=6, d_model=d_model, d_inner=d_inner,
-                            n_layers=n_layers, n_head=n_head, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-    self.classifier = nn.Linear(6, class_num)
-    # self.linear1_cov = nn.Conv1d(8, 1, kernel_size=1)
-    # self.linear1_linear = nn.Linear(4, class_num)
-    # # self.linear2_cov = nn.Conv1d(d_model, 1, kernel_size=1)
-    # # self.linear2_linear = nn.Linear(d_feature, class_num)
+# class Fusion(nn.Module):
+#   def __init__(self, device, model1, model2,
+#             d_feature, d_model, d_inner,
+#             n_layers, n_head, d_k=64, d_v=64, dropout = 0.5,
+#             class_num=3):
+#     super(Fusion, self).__init__()
+#     self.device = device
+#     self.model1 = model1
+#     self.model2 = model2
+#     self.Transformer = Transformer3(device=device, d_feature=6, d_model=d_model, d_inner=d_inner,
+#                             n_layers=n_layers, n_head=n_head, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+#     self.classifier = nn.Linear(6, class_num)
+#     self.bn = nn.BatchNorm1d(6)
+#     self.dropout = nn.Dropout(0.25)
 
-  def forward(self, x1, x2):
-    x1 = self.model1(x1)
-    x2 = self.model2(x2)
+#     # self.linear1_cov = nn.Conv1d(8, 1, kernel_size=1)
+#     # self.linear1_linear = nn.Linear(4, class_num)
+#     # # self.linear2_cov = nn.Conv1d(d_model, 1, kernel_size=1)
+#     # # self.linear2_linear = nn.Linear(d_feature, class_num)
+
+#   def forward(self, x1, x2):
+#     x1 = self.model1(x1)
+#     x2 = self.model2(x2)
     
-    x = torch.cat((x1, x2), dim = 1)
-    # out = self.linear1_cov(x)
-    # out = self.classifier(F.relu(x))
+#     x = torch.cat((x1, x2), dim = 1)
+#     # x = self.bn(x)
+#     # x = self.dropout(x)
 
-    out = self.Transformer(x)
-    return out, x1, x2
+#     # out = self.linear1_cov(x)
 
+#     out = self.classifier(x)
+
+#     # out = self.Transformer(x)
+#     return out, x1, x2
+
+class Fusion(nn.Module):
+    def __init__(self, model1, model2):
+        super(Fusion, self).__init__()
+        self.model1 = model1
+        self.model2 = model2
+        # self.classifier = nn.Linear(6, 3)
+       
+      
+
+    def forward(self, x1, x2):
+        
+        output1 = self.model1(x1)
+        output2 = self.model2(x2)
+        
+        
+
+        return output1, output2
 
 class Whole(nn.Module):
   def __init__(self,model1, model2):

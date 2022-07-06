@@ -106,9 +106,9 @@ def train_epoch(train_loader1, device, model, optimizer, total_num, total_num2):
       total_loss += loss.item()
       total_correct += (n_correct1)
       
-    total_loss1 = total_loss / total_num 
-    total_loss2 = total_loss/ total_num2
-    train_loss= total_loss1 + total_loss2
+    # total_loss1 = total_loss / total_num 
+    # total_loss2 = total_loss/ total_num2
+    train_loss= total_loss/total_num
 
     return train_loss, all_pred_train, all_pred2_train, all_labels_train
 
@@ -141,9 +141,9 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
   
         total_loss += loss.item()
         total_correct += (n_correct1)
-    total_loss1 = total_loss / total_num 
-    total_loss2 = total_loss/ total_num2
-    valid_loss= total_loss1 + total_loss2
+    # total_loss1 = total_loss / total_num 
+    # total_loss2 = total_loss/ total_num2
+    valid_loss= total_loss/total_num
     return valid_loss, all_pred_val, all_pred2_val, all_labels_val
 
 def test_epoch(valid_loader, device, model, total_num, total_num2):
@@ -181,9 +181,8 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
     np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_label_test.txt', all_labels)
     all_pred = np.array(all_pred)
     all_pred2 = np.array(all_pred2)
-    total_loss1 = total_loss / total_num 
-    total_loss2 = total_loss/ total_num2
-    total_loss= total_loss1 + total_loss2
+    
+    total_loss= total_loss/total_num
     print(f'Test loss: {total_loss}')
 
 
@@ -307,11 +306,11 @@ if __name__ == '__main__':
         # --- model
         model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        model2 = Transformer2(device=device, d_feature=839, d_model=d_model, d_inner=d_inner,
+        model2 = Transformer2(device=device, d_feature=838, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
         
         # model1 = Linear(device, 32, 3)
-        # model2 = Linear(device, 839, 3)
+        # model2 = Linear(device, 838, 3)
         
         
         model1 = nn.DataParallel(model1)
@@ -328,7 +327,7 @@ if __name__ == '__main__':
         
         optimizer = ScheduledOptim(
             Adam(filter(lambda x: x.requires_grad, model.parameters()),
-                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-6, weight_decay = 1e-6), d_model, warm_steps)
+                 betas=(0.9, 0.98), eps=1e-4, lr = 1e-2, weight_decay = 1e-2), d_model, warm_steps)
         
         train_accs = []
         valid_accs = []
@@ -386,9 +385,9 @@ if __name__ == '__main__':
             
 
         
-        np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_pred_train.txt',all_pred_train)
-        np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_pred2_train.txt',all_pred2_train)
-        np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_label_train.txt', all_labels_train)
+        # np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_pred_train.txt',all_pred_train)
+        # np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_pred2_train.txt',all_pred2_train)
+        # np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_label_train.txt', all_labels_train)
 
         np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_pred_val.txt',all_pred_val)
         np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_pred2_val.txt',all_pred2_val)
