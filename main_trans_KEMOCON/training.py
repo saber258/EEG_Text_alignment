@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from model_new import Transformer, Transformer2, Transformer3
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset, Text_EEGDataset, Fusion, 
+from dataset_new import EEGDataset, TextDataset, Text_EEGDataset, Fusion 
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -66,7 +66,98 @@ def cal_statistic(cm):
     return acc_SP, list(pre_i), list(rec_i), list(F1_i)
 
 
-def train_epoch(train_loader, device, model, optimizer, total_num):
+def train_epoch_text(train_loader, device, model, optimizer, total_num):
+    all_labels = []
+    all_res = []
+    model.train()
+    total_loss = 0
+    total_correct = 0
+    cnt_per_class = np.zeros(class_num)
+    
+    
+    
+    for batch in tqdm(train_loader, mininterval=100, desc='- (Training)  ', leave=False): 
+
+        sig, _, label, = map(lambda x: x.to(device), batch)
+        optimizer.zero_grad()
+        pred = model(sig)
+        all_labels.extend(label.cpu().numpy())
+        all_res.extend(pred.max(1)[1].cpu().numpy())
+        loss, n_correct, cnt = cal_loss(pred, label, device)
+        loss.backward()
+        optimizer.step_and_update_lr()
+
+        total_loss += loss.item()
+        total_correct += n_correct
+        cnt_per_class += cnt
+        cm = confusion_matrix(all_labels, all_res)
+
+    train_loss = total_loss / total_num
+    train_acc = total_correct / total_num
+    return train_loss, train_acc, cnt_per_class, cm
+
+def train_epoch_eeg(train_loader, device, model, optimizer, total_num):
+    all_labels = []
+    all_res = []
+    model.train()
+    total_loss = 0
+    total_correct = 0
+    cnt_per_class = np.zeros(class_num)
+    
+    
+    
+    for batch in tqdm(train_loader, mininterval=100, desc='- (Training)  ', leave=False): 
+
+        _, sig, label, = map(lambda x: x.to(device), batch)
+        optimizer.zero_grad()
+        pred = model(sig)
+        all_labels.extend(label.cpu().numpy())
+        all_res.extend(pred.max(1)[1].cpu().numpy())
+        loss, n_correct, cnt = cal_loss(pred, label, device)
+        loss.backward()
+        optimizer.step_and_update_lr()
+
+        total_loss += loss.item()
+        total_correct += n_correct
+        cnt_per_class += cnt
+        cm = confusion_matrix(all_labels, all_res)
+
+    train_loss = total_loss / total_num
+    train_acc = total_correct / total_num
+    return train_loss, train_acc, cnt_per_class, cm
+
+def train_epoch_fusion(train_loader, device, model, optimizer, total_num):
+    all_labels = []
+    all_res = []
+    model.train()
+    total_loss = 0
+    total_correct = 0
+    cnt_per_class = np.zeros(class_num)
+    
+    
+    
+    for batch in tqdm(train_loader, mininterval=100, desc='- (Training)  ', leave=False): 
+
+        sig, _, label, = map(lambda x: x.to(device), batch)
+        optimizer.zero_grad()
+        pred = model(sig)
+        all_labels.extend(label.cpu().numpy())
+        all_res.extend(pred.max(1)[1].cpu().numpy())
+        loss, n_correct, cnt = cal_loss(pred, label, device)
+        loss.backward()
+        optimizer.step_and_update_lr()
+
+        total_loss += loss.item()
+        total_correct += n_correct
+        cnt_per_class += cnt
+        cm = confusion_matrix(all_labels, all_res)
+
+    train_loss = total_loss / total_num
+    train_acc = total_correct / total_num
+    return train_loss, train_acc, cnt_per_class, cm
+
+
+def train_epoch_ds(train_loader, device, model, optimizer, total_num):
     all_labels = []
     all_res = []
     model.train()
