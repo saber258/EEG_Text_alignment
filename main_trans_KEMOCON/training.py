@@ -254,51 +254,51 @@ def train_epoch_fusion(train_loader, device, model, optimizer, total_num, total_
 def train_epoch_ds_text(train_loader, device, model, optimizer, total_num):
     all_labels = []
     all_res = []
+    all_pred_train = []
     model.train()
     total_loss = 0
     total_correct = 0
     cnt_per_class = np.zeros(class_num)
     
-    
-    
     for batch in tqdm(train_loader, mininterval=100, desc='- (Training)  ', leave=False): 
 
-        sig, _, label, = map(lambda x: x.to(device), batch)
+        sig2, sig1, label, = map(lambda x: x.to(device), batch)
         optimizer.zero_grad()
-        pred = model(sig)
+        pred, pred2 = model(sig1, sig2)
         all_labels.extend(label.cpu().numpy())
         all_res.extend(pred.max(1)[1].cpu().numpy())
-        loss, n_correct, cnt = cal_loss(pred, label, device)
+        all_pred_train.extend(pred.detach().cpu().numpy())
+        loss, n_correct = cal_loss(pred, label, pred2, device)
         loss.backward()
         optimizer.step_and_update_lr()
 
         total_loss += loss.item()
         total_correct += n_correct
-        cnt_per_class += cnt
         cm = confusion_matrix(all_labels, all_res)
 
     train_loss = total_loss / total_num
     train_acc = total_correct / total_num
-    return train_loss, train_acc, cnt_per_class, cm
+    return train_loss, train_acc, cm, all_pred_train, all_labels
+
 
 def train_epoch_ds_eeg(train_loader, device, model, optimizer, total_num):
     all_labels = []
     all_res = []
+    all_pred_train = []
     model.train()
     total_loss = 0
     total_correct = 0
     cnt_per_class = np.zeros(class_num)
     
-    
-    
     for batch in tqdm(train_loader, mininterval=100, desc='- (Training)  ', leave=False): 
 
-        sig, _, label, = map(lambda x: x.to(device), batch)
+        sig2, sig1, label, = map(lambda x: x.to(device), batch)
         optimizer.zero_grad()
-        pred = model(sig)
+        pred, pred2 = model(sig1, sig2)
         all_labels.extend(label.cpu().numpy())
-        all_res.extend(pred.max(1)[1].cpu().numpy())
-        loss, n_correct, cnt = cal_loss(pred, label, device)
+        all_res.extend(pred2.max(1)[1].cpu().numpy())
+        all_pred_train.extend(pred2.detach().cpu().numpy())
+        loss, n_correct, cnt = cal_loss(pred, label, pred2, device)
         loss.backward()
         optimizer.step_and_update_lr()
 
@@ -309,7 +309,7 @@ def train_epoch_ds_eeg(train_loader, device, model, optimizer, total_num):
 
     train_loss = total_loss / total_num
     train_acc = total_correct / total_num
-    return train_loss, train_acc, cnt_per_class, cm
+    return train_loss, train_acc, cnt_per_class, cm, all_pred_train, all_labels
 
 
 def eval_epoch(valid_loader, device, model, total_num):
