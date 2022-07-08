@@ -31,8 +31,12 @@ class cca_loss():
 
         o1 =  H1.size(0)
         o2 = H2.size(0)
-
+        # print(o1)
+        # print(o2)
         m = H1.size(1)
+        # print(m)
+        # print(H2.size(1))
+
 #         print(H1.size())
 
         H1bar = H1 - H1.mean(dim=1).unsqueeze(dim=1)
