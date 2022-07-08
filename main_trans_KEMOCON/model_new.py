@@ -139,7 +139,7 @@ class Transformer(nn.Module):
         self.linear2_linear = nn.Linear(d_feature, class_num)
         self.bn=nn.BatchNorm1d(d_feature)
         self.bn2=nn.BatchNorm1d(16) #batch
-        self.dropout = nn.Dropout(0.7)
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, src_seq):
         b, l = src_seq.size()
@@ -151,12 +151,12 @@ class Transformer(nn.Module):
 
         enc_output, *_ = self.encoder(src_seq, src_pos)
         # print(enc_output.shape)
-        enc_output = self.bn(enc_output)
+        # enc_output = self.bn(enc_output)
         
         res = self.linear1_cov(enc_output)
         res = res.contiguous().view(res.size()[0], -1)
-        res = self.bn2(res)
-        res = self.dropout(res)
+        # res = self.bn2(res)
+        # res = self.dropout(res)
         res = self.linear1_linear(res)
         # print(res.shape)
         return res
@@ -180,8 +180,8 @@ class Transformer2(nn.Module):
         self.linear2_cov = nn.Conv1d(d_model, 1, kernel_size=1)
         self.linear2_linear = nn.Linear(d_feature, class_num)
         self.bn=nn.BatchNorm1d(d_feature)
-        self.bn2=nn.BatchNorm1d(16) #batch
-        self.dropout = nn.Dropout(0.3)
+        self.bn2=nn.BatchNorm1d(16) #d_model
+        self.dropout = nn.Dropout(0.2)
 
     def forward(self, src_seq):
         b, l = src_seq.size()
@@ -223,7 +223,7 @@ class Transformer3(nn.Module):
         self.linear2_linear = nn.Linear(d_feature, class_num)
         self.bn=nn.BatchNorm1d(d_feature)
         self.bn2=nn.BatchNorm1d(16) #batch
-        self.dropout = nn.Dropout(0.3)
+        self.dropout = nn.Dropout(0.2)
 
     def forward(self, src_seq):
         b, l = src_seq.size()
@@ -239,8 +239,8 @@ class Transformer3(nn.Module):
         
         res = self.linear1_cov(enc_output)
         res = res.contiguous().view(res.size()[0], -1)
-        res = self.bn2(res)
-        res = self.dropout(res)
+        # res = self.bn2(res)
+        # res = self.dropout(res)
         res = self.linear1_linear(res)
         # print(res.shape)
         return res

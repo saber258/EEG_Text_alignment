@@ -31,8 +31,12 @@ class cca_loss():
 
         o1 =  H1.size(0)
         o2 = H2.size(0)
-
+        # print(o1)
+        # print(o2)
         m = H1.size(1)
+        # print(m)
+        # print(H2.size(1))
+
 #         print(H1.size())
 
         H1bar = H1 - H1.mean(dim=1).unsqueeze(dim=1)
@@ -113,25 +117,23 @@ class DeepCCA(nn.Module):
 
 class DeepCCA_fusion(nn.Module):
     def __init__(self, model1, outdim_size, use_all_singular_values, d_feature, d_model, d_inner,
-            n_layers, n_head, d_k=64, d_v=64, dropout = 0.1,
+            n_layers, n_head, d_k=64, d_v=64, dropout = 0.5,
             class_num=3, device=torch.device('cuda')):
         super(DeepCCA_fusion, self).__init__()
         self.model1 = model1
         self.Transformer = Transformer3(device=device, d_feature=6, d_model=d_model, d_inner=d_inner,
-                            n_layers=n_layers, n_head=n_head, d_k=d_k, d_v=d_v, dropout=dropout, class_num=class_num)
+                            n_layers=n_layers, n_head=n_head, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
 
         self.loss = cca_loss(outdim_size, use_all_singular_values, device).loss
         self.classifier = nn.Linear(6, class_num)
-        self.dropout = nn.Dropout(0.3)
 
     def forward(self, x1, x2):
         
         # feature * batch_size
         x1, x2 = self.model1(x1, x2)
         x = torch.cat((x1, x2), dim = 1)
-        x = self.dropout(x)
-        # out = self.classifier(F.relu(x))
-        out = self.Transformer(x)
+        out = self.classifier(F.relu(x))
+        # out = self.Transformer(x)
 
         return out, x1, x2
 
