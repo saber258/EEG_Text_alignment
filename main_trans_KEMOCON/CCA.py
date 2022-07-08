@@ -113,7 +113,7 @@ class DeepCCA(nn.Module):
 
 class DeepCCA_fusion(nn.Module):
     def __init__(self, model1, outdim_size, use_all_singular_values, d_feature, d_model, d_inner,
-            n_layers, n_head, d_k=64, d_v=64, dropout = 0.5,
+            n_layers, n_head, d_k=64, d_v=64, dropout = 0.1,
             class_num=3, device=torch.device('cuda')):
         super(DeepCCA_fusion, self).__init__()
         self.model1 = model1
@@ -122,12 +122,14 @@ class DeepCCA_fusion(nn.Module):
 
         self.loss = cca_loss(outdim_size, use_all_singular_values, device).loss
         self.classifier = nn.Linear(6, class_num)
+        self.dropout = nn.Dropout(0.3)
 
     def forward(self, x1, x2):
         
         # feature * batch_size
         x1, x2 = self.model1(x1, x2)
         x = torch.cat((x1, x2), dim = 1)
+        x = self.dropout(x)
         # out = self.classifier(F.relu(x))
         out = self.Transformer(x)
 

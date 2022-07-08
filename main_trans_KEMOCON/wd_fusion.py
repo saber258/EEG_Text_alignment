@@ -231,11 +231,6 @@ if __name__ == '__main__':
     df_test_text = df_test[[emotion, 'new_words']]
     df_test_eeg = df_test[eeg]
 
-    df_test_text = df_test[[emotion, 'new_words']]
-    df_test_eeg_label = df_test[[emotion]]
-    df_test_eeg = df_test.iloc[:, 3:]
-    df_test_eeg = pd.concat([df_test_eeg_label, df_test_eeg], axis=1)
-
     # --- Save CSV
     df_train_text.to_csv('df_train_text.csv', header = None, index = False, index_label = False)
     df_train_eeg.to_csv('df_train_eeg.csv', header = None, index = False, index_label = False)
@@ -318,10 +313,10 @@ if __name__ == '__main__':
         
         model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        model2 = Transformer2(device=device, d_feature=839, d_model=d_model, d_inner=d_inner,
+        model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
         # model1 = Linear(device, d_feature=32, class_num = 3)
-        # model2 = Linear(device, d_feature = 839, class_num=3)
+        # model2 = Linear(device, d_feature = 48, class_num=3)
         model1 = nn.DataParallel(model1)
         model2 = nn.DataParallel(model2)
         
@@ -433,35 +428,10 @@ if __name__ == '__main__':
         test_model_name = 'baselines/fusion_wd/'+str(r) + model_name
        
         chkpoint = torch.load(test_model_name, map_location='cuda')
-        model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
-                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        model2 = Transformer2(device=device, d_feature=839, d_model=d_model, d_inner=d_inner,
-                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+    
         
-        
-        # chkpt1 = torch.load(torchload, map_location = 'cuda')
-        # chkpt2 = torch.load(torchload2, map_location = 'cuda')
-
-        # model1.load_state_dict(chkpt1['model'])
-        # model2.load_state_dict(chkpt2['model'])
-
-
-        # model2 = model2.to(device)
-        # model1 = model1.to(device)
-        # model1 = Linear(device, d_feature = 32, class_num = 3).to(device)
-        # model2 = Linear(device, d_feature = 839, class_num =3).to(device)
-        model1 = nn.DataParallel(model1)
-        model2 = nn.DataParallel(model2)
-
-        model3 = Fusion(model1, model2).to(device)
-        # model = nn.DataParallel(model)
-        chkpt = torch.load(torchload3, map_location = 'cuda')
-        model3.load_state_dict(chkpt['model'])
-        # model = model.to(device)
-
         model = DeepCCA_fusion(model3, outdim_size = outdim_size,d_feature = 6,
-         d_model = d_model, d_inner = d_inner,n_layers = num_layers, n_head = num_heads, d_k=64, d_v=64, dropout = 0.5,
+         d_model = d_model, d_inner = d_inner,n_layers = num_layers, n_head = num_heads, d_k=64, d_v=64, dropout = 0.1,
             class_num=3, use_all_singular_values = False).to(device)
         model.load_state_dict(chkpoint['model'])
-        model = model.to(device)
         test_epoch(test_loader_text_eeg, device, model, test_text_eeg.__len__(), test_text_eeg.__len__())

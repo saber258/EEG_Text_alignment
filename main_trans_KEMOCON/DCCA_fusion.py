@@ -39,11 +39,11 @@ def cal_loss(pred1, pred2, label1, out, device):
 
     cnt_per_class = np.zeros(3)
 
-    loss1 = model3.loss
-    loss1 = loss1(pred1, pred2)
+    # loss1 = model3.loss
+    # loss1 = loss1(pred1, pred2)
 
     loss2 = F.cross_entropy(out, label1, reduction = 'sum')
-    loss = loss1 + loss2
+    loss = loss2
     out = out.max(1)[1]
    
     n_correct2 = out.eq(label1).sum().item()
@@ -117,6 +117,7 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
 
     all_labels = []
     all_res = []
+    all_pred = []
     total_loss = 0
     total_correct = 0
     cnt_per_class = np.zeros(class_num)
@@ -130,6 +131,7 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
         out, x1, x2 = model(sig1, sig2)
         all_labels.extend(label1.cpu().numpy())
         all_res.extend(out.max(1)[1].cpu().numpy())
+        all_pred.extend(out.cpu().detach().numpy())
         loss, n_correct1 = cal_loss(x1, x2, label1, out, device)
 
   
@@ -147,7 +149,7 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
     print('F1_i is : {F1_i}'.format(F1_i=F1_i))
     valid_loss = total_loss / total_num #+ total_num2)
     valid_acc = total_correct / total_num #+ total_num2)
-    return valid_loss, valid_acc, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4
+    return valid_loss, valid_acc, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4, all_pred, all_labels
 
 
 def test_epoch(valid_loader, device, model, total_num, total_num2):
@@ -209,13 +211,14 @@ if __name__ == '__main__':
     X = df.drop([emotion], axis = 1)
     y= df[[emotion]]
 
-    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.3, shuffle = True, stratify = y)
+    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.5, stratify = y)
     ros = RandomOverSampler(random_state=2)
     X_resampled_text, y_resampled_text = ros.fit_resample(X_train, y_train)
 
-    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True, stratify = y_val)
+    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, stratify = y_val)
     df_test = pd.concat([X_test, y_test], axis = 1)
     df_train = pd.concat([X_resampled_text, y_resampled_text], axis = 1)
+    # df_train = pd.concat([X_train, y_train], axis = 1)
     df_train = df_train.sample(frac=1).reset_index(drop=True)
     df_val = pd.concat([X_val, y_val], axis = 1)
 
@@ -227,6 +230,7 @@ if __name__ == '__main__':
 
     df_test_text = df_test[[emotion, 'new_words']]
     df_test_eeg = df_test[eeg]
+
 
     # --- Save CSV
     df_train_text.to_csv('df_train_text.csv', header = None, index = False, index_label = False)
@@ -312,7 +316,7 @@ if __name__ == '__main__':
         #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
         # model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
         #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        model1 = Linear(device, d_feature = 32, class_num = 3)
+        model1 = Linear(device, d_feature=32, class_num = 3)
         model2 = Linear(device, d_feature = 48, class_num=3)
         model1 = nn.DataParallel(model1)
         model2 = nn.DataParallel(model2)
@@ -330,12 +334,13 @@ if __name__ == '__main__':
         model3 = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
         # chkpt = torch.load(torchload3, map_location = 'cuda')
         # model3.load_state_dict(chkpt['model'])
-        model3 = model3.to(device)
 
-        model = DeepCCA_fusion(model3, outdim_size = outdim_size,d_feature = 6,
-         d_model = d_model, d_inner = d_inner,n_layers = num_layers, n_head = num_heads, d_k=64, d_v=64, dropout = 0.5,
-            class_num=3, use_all_singular_values = False).to(device)
-      
+        model = DeepCCA_fusion(model3, outdim_size = outdim_size, use_all_singular_values = False, d_feature = 6, d_model = d_model, d_inner = d_inner,
+            n_layers=num_layers, n_head = num_heads, d_k=64, d_v=64, dropout = 0.1,
+            class_num=3, device=torch.device('cuda'))
+        # model = nn.DataParallel(model)
+        
+        model= model.to(device)
 
         
         optimizer = ScheduledOptim(
@@ -347,6 +352,8 @@ if __name__ == '__main__':
         eva_indis = []
         train_losses = []
         valid_losses = []
+        all_pred_val = []
+        all_labels_val = []
         
         for epoch_i in range(epoch):
             print('[ Epoch', epoch_i, ']')
@@ -357,8 +364,10 @@ if __name__ == '__main__':
             train_accs.append(train_acc)
             train_losses.append(train_loss)
             start = time.time()
-            valid_loss, valid_acc, valid_cm, eva_indi = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__(), val_text_eeg.__len__())
+            valid_loss, valid_acc, valid_cm, eva_indi, val_pred, val_label = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__(), val_text_eeg.__len__())
 
+            all_pred_val.extend(val_pred)
+            all_labels_val.extend(val_label)
             valid_accs.append(valid_acc)
             eva_indis.append(eva_indi)
             valid_losses.append(valid_loss)
@@ -389,7 +398,8 @@ if __name__ == '__main__':
  
             
         
-        
+        np.savetxt(f'baselines/DCCA_fusion/{emotion}_{model_name_base}_all_pred_val.txt',all_pred_val)
+        np.savetxt(f'baselines/DCCA_fusion/{emotion}_{model_name_base}_all_label_val.txt', all_labels_val)
         print('ALL DONE')               
         time_consume = (time.time() - time_start_i)
         print('total ' + str(time_consume) + 'seconds')
@@ -419,31 +429,7 @@ if __name__ == '__main__':
         test_model_name = 'baselines/DCCA_fusion/'+str(r) + model_name
        
         chkpoint = torch.load(test_model_name, map_location='cuda')
-        # model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
-        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        # model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
-        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        model1 = Linear(device, d_feature = 32, class_num =3)
-        model2 = Linear(device, d_feature = 48, class_num = 3)
-        
-        model1 = nn.DataParallel(model1)
-        model2 = nn.DataParallel(model2)
-        
-        # chkpt1 = torch.load(torchload, map_location = 'cuda')
-        # chkpt2 = torch.load(torchload2, map_location = 'cuda')
-
-        # model1.load_state_dict(chkpt1['model'])
-        # model2.load_state_dict(chkpt2['model'])
-
-
-        model2 = model2.to(device)
-        model1 = model1.to(device)
-
-        model3 = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
-        # model = nn.DataParallel(model)
-        # chkpt = torch.load(torchload3, map_location = 'cuda')
-        # model.load_state_dict(chkpt['model'])
-        # model = model.to(device)
+      
 
         model = DeepCCA_fusion(model3, outdim_size = outdim_size,d_feature = 6,
          d_model = d_model, d_inner = d_inner,n_layers = num_layers, n_head = num_heads, d_k=64, d_v=64, dropout = 0.5,
@@ -451,4 +437,3 @@ if __name__ == '__main__':
         model.load_state_dict(chkpoint['model'])
         model = model.to(device)
         test_epoch(test_loader_text_eeg, device, model, test_text_eeg.__len__(), test_text_eeg.__len__())
-

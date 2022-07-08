@@ -11,9 +11,9 @@ from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
-from model_new import Transformer, Transformer2, Transformer3
+from model_new import Transformer
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset, Text_EEGDataset, Fusion, 
+from dataset_new import EEGDataset, TextDataset, Text_EEGDataset
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -24,7 +24,6 @@ import time
 import os
 from transformers import AutoTokenizer
 from imblearn.over_sampling import RandomOverSampler
-from CCA import DeepCCA, DeepCCA_fusion
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
@@ -100,6 +99,7 @@ def train_epoch(train_loader, device, model, optimizer, total_num):
 def eval_epoch(valid_loader, device, model, total_num):
     all_labels = []
     all_res = []
+    all_pred = []
     model.eval()
     total_loss = 0
     total_correct = 0
@@ -110,6 +110,7 @@ def eval_epoch(valid_loader, device, model, total_num):
             pred = model(sig)
             all_labels.extend(label.cpu().numpy())
             all_res.extend(pred.max(1)[1].cpu().numpy())
+            all_pred.extend(pred.cpu().detach().numpy())
             loss, n_correct, cnt = cal_loss(pred, label, device)
 
             total_loss += loss.item()
@@ -123,7 +124,7 @@ def eval_epoch(valid_loader, device, model, total_num):
     print('F1_i is : {F1_i}'.format(F1_i=F1_i))
     valid_loss = total_loss / total_num
     valid_acc = total_correct / total_num
-    return valid_loss, valid_acc, cnt_per_class, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4
+    return valid_loss, valid_acc, cnt_per_class, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4, all_pred, all_labels
 
 
 def test_epoch(valid_loader, device, model, total_num):
@@ -173,10 +174,7 @@ if __name__ == '__main__':
     
     # --- Preprocess
     df = pd.read_csv('df.csv')
-    one_hot = pd.get_dummies(df[emotion])
 
-    df = df.drop('angry_trans', axis = 1)
-    df = df.join(one_hot)
     X = df.drop([emotion], axis = 1)
     y= df[[emotion]]
 
@@ -300,6 +298,8 @@ if __name__ == '__main__':
         eva_indis = []
         train_losses = []
         valid_losses = []
+        all_val_pred= []
+        all_labels_val =[]
         
         for epoch_i in range(epoch):
             print('[ Epoch', epoch_i, ']')
@@ -309,10 +309,13 @@ if __name__ == '__main__':
             train_accs.append(train_acc)
             train_losses.append(train_loss)
             start = time.time()
-            valid_loss, valid_acc, valid_cnt, valid_cm, eva_indi = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__())
+            valid_loss, valid_acc, valid_cnt, valid_cm, eva_indi, val_pred, val_labels = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__())
 
+            all_labels_val.extend(val_labels)
+            all_val_pred.extend(val_pred)
             valid_accs.append(valid_acc)
             eva_indis.append(eva_indi)
+
             valid_losses.append(valid_loss)
 
             model_state_dict = model.state_dict()
@@ -336,7 +339,8 @@ if __name__ == '__main__':
                                                          elapse=(time.time() - start) / 60))
             print("valid_cm:", valid_cm)
         
-        
+        np.savetxt(f'baselines/eeg/{emotion}_{model_name_base}_all_pred_val.txt',all_val_pred)
+        np.savetxt(f'baselines/eeg/{emotion}_{model_name_base}_all_label_val.txt',all_labels_val)
         print('ALL DONE')               
         time_consume = (time.time() - time_start_i)
         print('total ' + str(time_consume) + 'seconds')

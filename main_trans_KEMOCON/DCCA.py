@@ -180,8 +180,8 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_DCCA_only_lin'
-    model_name = f'{emotion}_baseline_DCCA_only_lin.chkpt'
+    model_name_base = 'baseline_DCCA_only_tran'
+    model_name = f'{emotion}_baseline_DCCA_only_tran.chkpt'
     
     # --- Preprocess
     df = pd.read_csv('df.csv')
@@ -291,12 +291,12 @@ if __name__ == '__main__':
                                   shuffle=True)
         
         # --- model
-        # model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
-        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        # model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
-        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        model1 = Linear(device, 32, class_num)
-        model2 = Linear(device, 48, class_num)
+        model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
+                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
+                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        # model1 = Linear(device, 32, class_num)
+        # model2 = Linear(device, 48, class_num)
         
         
         model1 = nn.DataParallel(model1)
@@ -371,13 +371,14 @@ if __name__ == '__main__':
             
 
         
-        np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_pred_train.txt',all_pred_train)
-        np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_pred2_train.txt',all_pred2_train)
-        np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_label_train.txt', all_labels_train)
+
 
         np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_pred_val.txt',all_pred_val)
         np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_pred2_val.txt',all_pred2_val)
         np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_label_val.txt', all_labels_val)
+        np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_pred_train.txt',all_pred_train)
+        np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_pred2_train.txt',all_pred2_train)
+        np.savetxt(f'baselines/DCCA/{emotion}_{model_name_base}_all_label_train.txt', all_labels_train)
         print('ALL DONE')               
         time_consume = (time.time() - time_start_i)
         print('total ' + str(time_consume) + 'seconds')

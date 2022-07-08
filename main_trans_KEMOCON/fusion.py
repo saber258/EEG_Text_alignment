@@ -107,6 +107,7 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
     model.eval()
 
     all_labels = []
+    all_pred = []
     all_res = []
     total_loss = 0
     total_correct = 0
@@ -122,6 +123,7 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
         pred1, _, _ = model(sig1, sig2)
         all_labels.extend(label1.cpu().numpy())
         all_res.extend(pred1.max(1)[1].cpu().numpy())
+        all_pred.extend(pred1.cpu().detach().numpy())
         loss, n_correct1, cnt1 = cal_loss(pred1, label1, device)
     
         
@@ -137,7 +139,7 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
     print('F1_i is : {F1_i}'.format(F1_i=F1_i))
     valid_loss = total_loss / total_num 
     valid_acc = total_correct /total_num 
-    return valid_loss, valid_acc, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4
+    return valid_loss, valid_acc, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4, all_pred, all_labels
 
 
 def test_epoch(valid_loader, device, model, total_num, total_num2):
@@ -180,8 +182,8 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_earlyfusion_trans'
-    model_name = f'{emotion}_baseline_earlyfusion_trans.chkpt'
+    model_name_base = 'baseline_fusion_lin'
+    model_name = f'{emotion}_baseline_fusion_lin.chkpt'
     
     # --- Preprocess
     df = pd.read_csv('df.csv')
@@ -192,6 +194,7 @@ if __name__ == '__main__':
     X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.3, shuffle = True, stratify = y)
     ros = RandomOverSampler(random_state=2)
     X_resampled_text, y_resampled_text = ros.fit_resample(X_train, y_train)
+    # X_resampled_text, y_resampled_text = ros.fit_resample(X_resampled_text, y_resampled_text)
 
     X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True, stratify = y_val)
     df_test = pd.concat([X_test, y_test], axis = 1)
@@ -308,7 +311,7 @@ if __name__ == '__main__':
         # model = Fusion(model1, model2, d_model = 16, class_num = class_num).to(device)
       
         model = Fusion(device=device, model1 = model1, model2 = model2,
-        d_feature =80, d_model=d_model, d_inner=d_inner,
+        d_feature =32, d_model=d_model, d_inner=d_inner,
         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num).to(device)
       
 
@@ -322,6 +325,8 @@ if __name__ == '__main__':
         eva_indis = []
         train_losses = []
         valid_losses = []
+        valid_pred = []
+        valid_label = []
         
         for epoch_i in range(epoch):
             print('[ Epoch', epoch_i, ']')
@@ -332,8 +337,10 @@ if __name__ == '__main__':
             train_accs.append(train_acc)
             train_losses.append(train_loss)
             start = time.time()
-            valid_loss, valid_acc, valid_cm, eva_indi = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__(), val_text_eeg.__len__())
-
+            valid_loss, valid_acc, valid_cm, eva_indi, all_pred_val, all_label_val = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__(), val_text_eeg.__len__())
+            
+            valid_pred.extend(all_pred_val)
+            valid_label.extend(all_label_val)
             valid_accs.append(valid_acc)
             eva_indis.append(eva_indi)
             valid_losses.append(valid_loss)
@@ -361,7 +368,8 @@ if __name__ == '__main__':
                                                          elapse=(time.time() - start) / 60))
             print("valid_cm:", valid_cm)
         
-        
+        np.savetxt(f'baselines/text_eeg_fusion/{emotion}_{model_name_base}_all_pred_val.txt',valid_pred)
+        np.savetxt(f'baselines/text_eeg_fusion/{emotion}_{model_name_base}_all_label_val.txt', valid_label)
         print('ALL DONE')               
         time_consume = (time.time() - time_start_i)
         print('total ' + str(time_consume) + 'seconds')
@@ -394,7 +402,7 @@ if __name__ == '__main__':
 
         chkpoint = torch.load(test_model_name, map_location='cuda')
         model = Fusion(device=device, model1 = model1, model2 = model2,
-        d_feature =80, d_model=d_model, d_inner=d_inner,
+        d_feature =32, d_model=d_model, d_inner=d_inner,
         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num).to(device)
         model.load_state_dict(chkpoint['model'])
         model = model.to(device)
