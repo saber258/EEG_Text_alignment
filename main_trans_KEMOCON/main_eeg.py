@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from model_new import Transformer
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset, Text_EEGDataset
+from dataset_new import EEGDataset, TextDataset, BalancedBatchSampler, Text_EEGDataset
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -24,6 +24,12 @@ import time
 import os
 from transformers import AutoTokenizer
 from imblearn.over_sampling import RandomOverSampler
+from numpy import inf
+from torch.utils.tensorboard import SummaryWriter
+writer = SummaryWriter()
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+r=0
+
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
@@ -36,6 +42,7 @@ def cal_loss(pred, label, device):
     cnt_per_class = np.zeros(3)
 
     loss = F.cross_entropy(pred, label, reduction='sum')
+    # loss = FL(pred, label, device)
     pred = pred.max(1)[1]
     n_correct = pred.eq(label).sum().item()
     cnt_per_class = [cnt_per_class[j] + pred.eq(j).sum().item() for j in range(class_num)]
@@ -172,7 +179,7 @@ if __name__ == '__main__':
     model_name_base = 'baseline_onlyeeg'
     model_name = f'{emotion}_baseline_onlyeeg.chkpt'
     
-    # --- Preprocess
+       # --- Preprocess
     df = pd.read_csv('df.csv')
 
     X = df.drop([emotion], axis = 1)
@@ -222,159 +229,160 @@ if __name__ == '__main__':
     df_test_eeg = pd.read_csv('df_test_eeg.csv', header = None).values
 
 
-    for r in range(1):
-        time_start_i = time.time()
+
+    time_start_i = time.time()
 
 
-        if torch.cuda.is_available():
-            device = torch.device('cuda')
-        else:
-            device = torch.device('cpu')
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
 
-        # --- Text and EEG
-        train_text_eeg = Text_EEGDataset(
-            texts = df_train_text[:,1:],
-            labels = df_train_text[:,0],
-            tokenizer = tokenizer,
-            max_len = MAX_LEN,
-            signals = df_train_eeg[:, 1:]
-        )
-        val_text_eeg = Text_EEGDataset(
-            texts = df_val_text[:, 1:],
-            labels = df_val_text[:, 0],
-            tokenizer = tokenizer,
-            max_len = MAX_LEN,
-            signals = df_val_eeg[:, 1:]
-        )
+    # --- Text and EEG
+    train_text_eeg = Text_EEGDataset(
+        texts = df_train_text[:,1:],
+        labels = df_train_text[:,0],
+        tokenizer = tokenizer,
+        max_len = MAX_LEN,
+        signals = df_train_eeg[:, 1:]
+    )
+    val_text_eeg = Text_EEGDataset(
+        texts = df_val_text[:, 1:],
+        labels = df_val_text[:, 0],
+        tokenizer = tokenizer,
+        max_len = MAX_LEN,
+        signals = df_val_eeg[:, 1:]
+    )
 
-        test_text_eeg = Text_EEGDataset(
-          texts = df_test_text[:, 1:],
-          labels = df_test_text[:, 0],
-          tokenizer = tokenizer,
-          max_len = MAX_LEN,
-          signals = df_test_eeg[:, 1:]
+    test_text_eeg = Text_EEGDataset(
+      texts = df_test_text[:, 1:],
+      labels = df_test_text[:, 0],
+      tokenizer = tokenizer,
+      max_len = MAX_LEN,
+      signals = df_test_eeg[:, 1:]
 
-        )
-        
-        # --- Sampler
-        target = df_train_text[:, 0].astype('int')
-        class_sample_count = np.unique(target, return_counts=True)[1]
-        weight = 1. / class_sample_count
-        samples_weight = weight[target]
-        samples_weight = torch.from_numpy(samples_weight)
-        samples_weight = samples_weight.double()
-        sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
-
-
-        # --- Loader
-        train_loader_text_eeg = DataLoader(dataset=train_text_eeg,
-                                  batch_size=batch_size,
-                                  num_workers=2,
-                                  sampler = sampler)
-
-        valid_loader_text_eeg = DataLoader(dataset=val_text_eeg,
-                                  batch_size=batch_size,
-                                  num_workers=2,
-                                  shuffle=True)
-        test_loader_text_eeg = DataLoader(dataset=test_text_eeg,
-                                  batch_size=batch_size,
-                                  num_workers=2,
-                                  shuffle=True)
+    )
     
-        
-        model = Transformer(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
-                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+    # --- Sampler
+    target = df_train_text[:, 0].astype('int')
+    class_sample_count = np.unique(target, return_counts=True)[1]
+    weight = 1. / class_sample_count
+    samples_weight = weight[target]
+    samples_weight = torch.from_numpy(samples_weight)
+    samples_weight = samples_weight.double()
+    sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
 
-        model = nn.DataParallel(model)
-        model = model.to(device)
 
-        
-        optimizer = ScheduledOptim(
-            Adam(filter(lambda x: x.requires_grad, model.parameters()),
-                 betas=(0.9, 0.98), eps=1e-4 ,lr = 1e-5, weight_decay = 1e-6), d_model, warm_steps)
-        
-        train_accs = []
-        valid_accs = []
-        eva_indis = []
-        train_losses = []
-        valid_losses = []
-        all_val_pred= []
-        all_labels_val =[]
-        
-        for epoch_i in range(epoch):
-            print('[ Epoch', epoch_i, ']')
-            start = time.time()
-            train_loss, train_acc, train_cnt, train_cm = train_epoch(train_loader_text_eeg, device, model, optimizer, train_text_eeg.__len__())
 
-            train_accs.append(train_acc)
-            train_losses.append(train_loss)
-            start = time.time()
-            valid_loss, valid_acc, valid_cnt, valid_cm, eva_indi, val_pred, val_labels = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__())
+    # --- Loader
+    train_loader_text_eeg = DataLoader(dataset=train_text_eeg,
+                              batch_size=batch_size,
+                              num_workers=2,
+                              sampler = sampler)
+                              # shuffle = True)
 
-            all_labels_val.extend(val_labels)
-            all_val_pred.extend(val_pred)
-            valid_accs.append(valid_acc)
-            eva_indis.append(eva_indi)
+    valid_loader_text_eeg = DataLoader(dataset=val_text_eeg,
+                              batch_size=batch_size,
+                              num_workers=2,
+                              shuffle=True)
+    test_loader_text_eeg = DataLoader(dataset=test_text_eeg,
+                              batch_size=batch_size,
+                              num_workers=2,
+                              shuffle=True)
+    
+    model = Transformer(device=device, d_feature=838, d_model=d_model, d_inner=d_inner,
+                        n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
 
-            valid_losses.append(valid_loss)
+    model = nn.DataParallel(model)
+    model = model.to(device)
 
-            model_state_dict = model.state_dict()
+    
+    optimizer = ScheduledOptim(
+        Adam(filter(lambda x: x.requires_grad, model.parameters()),
+              betas=(0.9, 0.98), eps=1e-4, lr = 1e-5, weight_decay=1e-2), d_model, warm_steps)
+    
+    train_accs = []
+    valid_accs = []
+    eva_indis = []
+    train_losses = []
+    valid_losses = []
+    valid_pred = []
+    valid_label = []
+    
+    for epoch_i in range(epoch):
+        print('[ Epoch', epoch_i, ']')
+        start = time.time()
+        train_loss, train_acc, train_cnt, train_cm = train_epoch(train_loader_text_eeg, device, model, optimizer, train_text_eeg.__len__())
 
-            checkpoint = {
-                'model': model_state_dict,
-                'config_file': 'config',
-                'epoch': epoch_i}
+        train_accs.append(train_acc)
+        train_losses.append(train_loss)
+        start = time.time()
+        valid_loss, valid_acc, valid_cnt, valid_cm, eva_indi, all_pred_val, all_label_val = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__())
 
-            if eva_indi >= max(eva_indis):
-                torch.save(checkpoint, 'baselines/eeg/' + str(r)+model_name)
-                print('    - [Info] The checkpoint file has been updated.')
+        valid_pred.extend(all_pred_val)
+        valid_label.extend(all_label_val)
+        valid_accs.append(valid_acc)
+        eva_indis.append(eva_indi)
+        valid_losses.append(valid_loss)
 
-        
-            print('  - (Training)  loss: {loss: 8.5f}, accuracy: {accu:3.3f} %, '
-                      'elapse: {elapse:3.3f} min'.format(loss=train_loss, accu=100 * train_acc,
-                                                         elapse=(time.time() - start) / 60))
-            print("train_cm:", train_cm)
-            print('  - (Validation)  loss: {loss: 8.5f}, accuracy: {accu:3.3f} %, '
-                      'elapse: {elapse:3.3f} min'.format(loss=valid_loss, accu=100 * valid_acc,
-                                                         elapse=(time.time() - start) / 60))
-            print("valid_cm:", valid_cm)
-        
-        np.savetxt(f'baselines/eeg/{emotion}_{model_name_base}_all_pred_val.txt',all_val_pred)
-        np.savetxt(f'baselines/eeg/{emotion}_{model_name_base}_all_label_val.txt',all_labels_val)
-        print('ALL DONE')               
-        time_consume = (time.time() - time_start_i)
-        print('total ' + str(time_consume) + 'seconds')
-        fig1 = plt.figure('Figure 1')
-        plt.plot(train_losses, label = 'train')
-        plt.plot(valid_losses, label= 'valid')
-        plt.xlabel('epoch')
-        plt.ylim([0.0, 2])
-        plt.ylabel('loss')
-        plt.legend(loc ="upper right")
-        plt.title('loss change curve')
+        model_state_dict = model.state_dict()
 
-        plt.savefig(f'baselines/eeg/{emotion}_{model_name_base}results_%s_loss.png'%r)
+        checkpoint = {
+            'model': model_state_dict,
+            'config_file': 'config',
+            'epoch': epoch_i}
 
-        fig2 = plt.figure('Figure 2')
-        plt.plot(train_accs, label = 'train')
-        plt.plot(valid_accs, label = 'valid')
-        plt.xlabel('epoch')
-        plt.ylim([0.0, 1])
-        plt.ylabel('accuracy')
-        plt.legend(loc ="upper right")
-        plt.title('accuracy change curve')
+        if eva_indi >= max(eva_indis):
+            torch.save(checkpoint, 'baselines/eeg/' + str(r)+model_name)
+            print('    - [Info] The checkpoint file has been updated.')
 
-        plt.savefig(f'baselines/eeg/{emotion}_{model_name_base}results_%s_acc.png'%r)
-        
+    
+        print('  - (Training)  loss: {loss: 8.5f}, accuracy: {accu:3.3f} %, '
+                  'elapse: {elapse:3.3f} min'.format(loss=train_loss, accu=100 * train_acc,
+                                                      elapse=(time.time() - start) / 60))
+        print("train_cm:", train_cm)
+        print('  - (Validation)  loss: {loss: 8.5f}, accuracy: {accu:3.3f} %, '
+                  'elapse: {elapse:3.3f} min'.format(loss=valid_loss, accu=100 * valid_acc,
+                                                      elapse=(time.time() - start) / 60))
+        print("valid_cm:", valid_cm)
+        writer.add_scalar('Accuracy', train_acc, epoch_i)
+        writer.add_scalar('Loss', train_loss, epoch_i)
+    np.savetxt(f'baselines/eeg/{emotion}_{model_name_base}_all_pred_val.txt',valid_pred)
+    np.savetxt(f'baselines/eeg/{emotion}_{model_name_base}_all_label_val.txt', valid_label)
+    print('ALL DONE')               
+    time_consume = (time.time() - time_start_i)
+    print('total ' + str(time_consume) + 'seconds')
+    fig1 = plt.figure('Figure 1')
+    plt.plot(train_losses, label = 'train')
+    plt.plot(valid_losses, label= 'valid')
+    plt.xlabel('epoch')
+    plt.ylim([0.0, 2])
+    plt.ylabel('loss')
+    plt.legend(loc ="upper right")
+    plt.title('loss change curve')
 
-        test_model_name = 'baselines/eeg/' + str(r) + model_name
-        model = Transformer(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
-                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout,
-                            class_num=class_num)
-        model = nn.DataParallel(model)
+    plt.savefig(f'baselines/eeg/{emotion}_{model_name_base}results_%s_loss.png'%r)
 
-        chkpoint = torch.load(test_model_name, map_location='cuda')
-        model.load_state_dict(chkpoint['model'])
-        model = model.to(device)
-        test_epoch(test_loader_text_eeg, device, model, test_text_eeg.__len__())
+    fig2 = plt.figure('Figure 2')
+    plt.plot(train_accs, label = 'train')
+    plt.plot(valid_accs, label = 'valid')
+    plt.xlabel('epoch')
+    plt.ylim([0.0, 1])
+    plt.ylabel('accuracy')
+    plt.legend(loc ="upper right")
+    plt.title('accuracy change curve')
 
+    plt.savefig(f'baselines/eeg/{emotion}_{model_name_base}results_%s_acc.png'%r)
+    
+
+    test_model_name = 'baselines/eeg/' + str(r) + model_name
+    model = Transformer(device=device, d_feature=838, d_model=d_model, d_inner=d_inner,
+                        n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout,
+                        class_num=class_num)
+    model = nn.DataParallel(model)
+
+    chkpoint = torch.load(test_model_name, map_location='cuda')
+    model.load_state_dict(chkpoint['model'])
+    model = model.to(device)
+    test_epoch(test_loader_text_eeg, device, model, test_text_eeg.__len__())
+writer.close()

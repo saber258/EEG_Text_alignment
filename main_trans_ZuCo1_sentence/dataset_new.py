@@ -124,47 +124,49 @@ class Linear(nn.Module):
     return out
 
 
-class Fusion(nn.Module):
-  def __init__(self, device, model1, model2,
-            d_feature, d_model, d_inner,
-            n_layers, n_head, d_k=64, d_v=64, dropout = 0.5,
-            class_num=3):
-    super(Fusion, self).__init__()
-    self.device = device
-    self.model1 = model1
-    self.model2 = model2
-    self.Transformer = Transformer3(device=device, d_feature=6, d_model=d_model, d_inner=d_inner,
-                            n_layers=n_layers, n_head=n_head, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-    self.classifier = nn.Linear(6, class_num)
-    self.bn = nn.BatchNorm1d(6)
-    self.dropout = nn.Dropout(0.25)
+# class Fusion(nn.Module):
+#   def __init__(self, device, model1, model2,
+#             d_feature, d_model, d_inner,
+#             n_layers, n_head, d_k=64, d_v=64, dropout = 0.5,
+#             class_num=3):
+#     super(Fusion, self).__init__()
+#     self.device = device
+#     self.model1 = model1
+#     self.model2 = model2
+#     self.Transformer = Transformer3(device=device, d_feature=6, d_model=d_model, d_inner=d_inner,
+#                             n_layers=n_layers, n_head=n_head, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+#     self.classifier = nn.Linear(6, class_num)
+#     self.bn = nn.BatchNorm1d(6)
+#     self.dropout = nn.Dropout(0.25)
 
-    # self.linear1_cov = nn.Conv1d(8, 1, kernel_size=1)
-    # self.linear1_linear = nn.Linear(4, class_num)
-    # # self.linear2_cov = nn.Conv1d(d_model, 1, kernel_size=1)
-    # # self.linear2_linear = nn.Linear(d_feature, class_num)
+#     # self.linear1_cov = nn.Conv1d(8, 1, kernel_size=1)
+#     # self.linear1_linear = nn.Linear(4, class_num)
+#     # # self.linear2_cov = nn.Conv1d(d_model, 1, kernel_size=1)
+#     # # self.linear2_linear = nn.Linear(d_feature, class_num)
 
-  def forward(self, x1, x2):
-    x1 = self.model1(x1)
-    x2 = self.model2(x2)
+#   def forward(self, x1, x2):
+#     x1 = self.model1(x1)
+#     x2 = self.model2(x2)
     
-    x = torch.cat((x1, x2), dim = 1)
-    # x = self.bn(x)
-    # x = self.dropout(x)
+#     x = torch.cat((x1, x2), dim = 1)
+#     # x = self.bn(x)
+#     # x = self.dropout(x)
 
-    # out = self.linear1_cov(x)
+#     # out = self.linear1_cov(x)
 
-    out = self.classifier(x)
+#     out = self.classifier(x)
 
-    # out = self.Transformer(x)
-    return out, x1, x2
+#     # out = self.Transformer(x)
+#     return out, x1, x2
 
-class Fusion2(nn.Module):
+class Fusion(nn.Module):
     def __init__(self, model1, model2):
         super(Fusion, self).__init__()
         self.model1 = model1
         self.model2 = model2
         # self.classifier = nn.Linear(6, 3)
+       
+      
 
     def forward(self, x1, x2):
         

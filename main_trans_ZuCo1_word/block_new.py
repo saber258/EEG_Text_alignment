@@ -4,11 +4,13 @@ import torch.nn.functional as F
 import numpy as np
 from sublayer_new import MultiHeadAttention, MultiHeadAttention2, MultiHeadAttention3
 from config import PAD
+import scipy.stats as stats
+
 
 
 class PositionwiseFeedForward(nn.Module):
 
-    def __init__(self, d_in, d_hid, dropout=0.5):
+    def __init__(self, d_in, d_hid, dropout=0.1):
         super().__init__()
         self.w_1 = nn.Conv1d(d_in, d_hid, 1)  
         self.w_2 = nn.Conv1d(d_hid, d_in, 1)  
@@ -41,8 +43,14 @@ def get_sinusoid_encoding_table(n_position, d_hid, padding_idx=None):
     if padding_idx is not None:
 
         sinusoid_table[padding_idx] = 0.
+    
+    
+    x = stats.zscore(sinusoid_table, axis=0, nan_policy = 'omit')
+    x = torch.FloatTensor(sinusoid_table)
 
-    return torch.FloatTensor(sinusoid_table)
+    return x
+
+
 
 
 def get_non_pad_mask(seq):
@@ -70,7 +78,7 @@ def get_attn_key_pad_mask(seq_k, seq_q):
 
 class EncoderLayer(nn.Module):
 
-    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.5):
+    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.3):
         super(EncoderLayer, self).__init__()
         self.slf_attn = MultiHeadAttention(
             n_head, d_model, d_k, d_v, dropout=dropout)
@@ -88,7 +96,7 @@ class EncoderLayer(nn.Module):
 
 class EncoderLayer2(nn.Module):
 
-    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.5):
+    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.3):
         super(EncoderLayer2, self).__init__()
         self.slf_attn = MultiHeadAttention2(
             n_head, d_model, d_k, d_v, dropout=dropout)
@@ -108,7 +116,7 @@ class EncoderLayer2(nn.Module):
 
 class EncoderLayer3(nn.Module):
 
-    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.5):
+    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.3):
         super(EncoderLayer3, self).__init__()
         self.slf_attn = MultiHeadAttention3(
             n_head, d_model, d_k, d_v, dropout=dropout)

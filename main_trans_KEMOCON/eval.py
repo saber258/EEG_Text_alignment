@@ -82,11 +82,11 @@ def test_epoch(valid_loader, device, model, total_num):
 
             sig2, sig1, label, = map(lambda x: x.to(device), batch)
 
-            _, pred= model(sig1, sig2)  
+            pred, pred2 = model(sig1, sig2) 
             all_labels.extend(label.cpu().numpy())
-            all_res.extend(pred.max(1)[1].cpu().numpy())
-            all_pred.extend(pred.cpu().numpy())
-            loss, n_correct, cnt = cal_loss(pred, label, device)
+            all_res.extend(pred2.max(1)[1].cpu().numpy())
+            all_pred.extend(pred2.cpu().numpy())
+            loss, n_correct, cnt = cal_loss(pred2, label, device)
 
             total_loss += loss.item()
             total_correct += n_correct
@@ -121,11 +121,13 @@ if __name__ == '__main__':
     X = df.drop([emotion], axis = 1)
     y= df[[emotion]]
 
-    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.5, stratify = y)
+    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.3, shuffle = True, stratify = y)
     ros = RandomOverSampler(random_state=2)
     X_resampled_text, y_resampled_text = ros.fit_resample(X_train, y_train)
 
-    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, stratify = y_val)
+    
+
+    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True, stratify = y_val)
     df_test = pd.concat([X_test, y_test], axis = 1)
     df_train = pd.concat([X_resampled_text, y_resampled_text], axis = 1)
     # df_train = pd.concat([X_train, y_train], axis = 1)
@@ -224,22 +226,22 @@ if __name__ == '__main__':
 
         
 
-        # model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
-        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        # model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
-        #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
+                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+        model2 = Transformer2(device=device, d_feature=838, d_model=d_model, d_inner=d_inner,
+                            n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
         
-        model1 = Linear(device, d_feature=32, class_num = 3)
-        model2 = Linear(device, d_feature = 48, class_num=3)
+        # model1 = Linear(device, d_feature=32, class_num = 3)
+        # model2 = Linear(device, d_feature = 839, class_num=3)
 
         model1 = nn.DataParallel(model1)
         model2 = nn.DataParallel(model2)
         
-        model2 = model2.to(device)
         model1 = model1.to(device)
+        model2 = model2.to(device)
         
         # model = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
-        
+        # 
         model = Fusion(model1, model2).to(device)
 
         # model = Fusion(device=device, model1 = model1, model2 = model2,
@@ -257,5 +259,5 @@ if __name__ == '__main__':
         chkpoint = torch.load(torchload3, map_location='cuda')
         model.load_state_dict(chkpoint['model'])
         model = model.to(device)
-        test_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__())
+        test_epoch(test_loader_text_eeg, device, model, test_text_eeg.__len__())
 
