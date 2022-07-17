@@ -7,6 +7,7 @@ import torch.nn as nn
 from config import *
 import torch.nn.functional as F
 from torch.utils.data.sampler import BatchSampler
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from model_new import Encoder, Encoder2, Transformer, Transformer3, Encoder3
 import scipy.stats as stats
 
@@ -159,6 +160,7 @@ class Linear(nn.Module):
 #     # out = self.Transformer(x)
 #     return out, x1, x2
 
+
 class Fusion(nn.Module):
     def __init__(self, model1, model2):
         super(Fusion, self).__init__()
@@ -176,6 +178,35 @@ class Fusion(nn.Module):
         
 
         return output1, output2
+
+class BiLSTM(nn.Module):
+    #vocab_size = 48, 32, 838
+    def __init__(self, vocab_size, embedding_dim = 300, hidden_dim1 = 256, hidden_dim2 = 128, output_dim = 3, n_layers =2,
+                 dropout = 0.3, bidirectional = True, pad_index = 0):
+        super().__init__()
+        self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx = pad_index)
+        self.lstm = nn.LSTM(embedding_dim,
+                            hidden_dim1,
+                            num_layers=n_layers,
+                            bidirectional=bidirectional,
+                            batch_first=True)
+        self.fc1 = nn.Linear(hidden_dim1 * 2, hidden_dim2)
+        self.fc2 = nn.Linear(hidden_dim2, output_dim)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, text, text_lengths):
+        embedded = self.embedding(text)
+        packed_embedded = pack_padded_sequence(embedded, text_lengths, batch_first=True) 
+
+        packed_output, (hidden, cell) = self.lstm(packed_embedded)
+        cat = torch.cat((hidden[-2, :, :], hidden[-1, :, :]), dim=1)
+        rel = self.relu(cat)
+        dense1 = self.fc1(rel)
+        drop = self.dropout(dense1)
+        preds = self.fc2(drop)
+        return preds
+
 
 class Whole(nn.Module):
   def __init__(self,model1, model2):
@@ -283,3 +314,31 @@ class TransformerFusion(nn.Module):
         res = self.linear1_linear(res)
 
         return res
+
+
+class MLP(nn.Module):
+  #vocab_size = 48, 32, 838
+    def __init__(self, vocab_size, embed_size = 300, hidden_size2 = 256, hidden_size3 = 128, hidden_size4 = 64, output_dim = class_num, dropout = 0.3, max_document_length = 32):
+        super().__init__()
+        # embedding and convolution layers
+        self.embedding = nn.Embedding(vocab_size, embed_size)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(dropout)
+        self.fc1 = nn.Linear(embed_size*max_document_length, hidden_size2)  # dense layer
+        self.fc2 = nn.Linear(hidden_size2, hidden_size3)  # dense layer
+        self.fc3 = nn.Linear(hidden_size3, hidden_size4)  # dense layer
+        self.fc4 = nn.Linear(hidden_size4, output_dim)  # dense layer
+
+    def forward(self, text, text_lengths):
+        # text shape = (batch_size, num_sequences)
+        embedded = self.embedding(text)
+        # embedded = [batch size, sent_len, emb dim]
+        x = embedded.view(embedded.shape[0], -1)  # x = Flatten()(x)
+        x = self.relu(self.fc1(x))
+        x = self.dropout(x)
+        x = self.relu(self.fc2(x))
+        x = self.dropout(x)
+        x = self.relu(self.fc3(x))
+        x = self.dropout(x)
+        preds = self.fc4(x)
+        return preds
