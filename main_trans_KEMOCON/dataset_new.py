@@ -7,6 +7,7 @@ import torch.nn as nn
 from config import *
 import torch.nn.functional as F
 from torch.utils.data.sampler import BatchSampler
+from block_new import get_sinusoid_encoding_table
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from model_new import Encoder, Encoder2, Transformer, Transformer3, Encoder3
 import scipy.stats as stats
@@ -328,7 +329,8 @@ class TransformerFusion(nn.Module):
 
 class MLP(nn.Module):
   #vocab_size = 48, 32, 838
-    def __init__(self, vocab_size, embed_size = 300, hidden_size2 = 256, hidden_size3 = 128, hidden_size4 = 64, output_dim = class_num, dropout = 0.3, max_document_length = 32):
+    def __init__(self, vocab_size, embed_size = 100, hidden_size2 = 256, hidden_size3 = 128, hidden_size4 = 64, 
+    output_dim = class_num, dropout = 0.3, max_document_length = 48):
         super().__init__()
         # embedding and convolution layers
         self.embedding = nn.Embedding(vocab_size, embed_size)
@@ -339,8 +341,11 @@ class MLP(nn.Module):
         self.fc3 = nn.Linear(hidden_size3, hidden_size4)  # dense layer
         self.fc4 = nn.Linear(hidden_size4, output_dim)  # dense layer
 
-    def forward(self, text, text_lengths):
+    def forward(self, text):
         # text shape = (batch_size, num_sequences)
+        b, l = text.size()
+ 
+        text_lengths = torch.tensor([48]*b).cpu()
         embedded = self.embedding(text)
         # embedded = [batch size, sent_len, emb dim]
         x = embedded.view(embedded.shape[0], -1)  # x = Flatten()(x)
