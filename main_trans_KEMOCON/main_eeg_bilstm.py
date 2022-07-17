@@ -86,7 +86,7 @@ def train_epoch(train_loader, device, model, optimizer, total_num):
 
         sig, _, label, = map(lambda x: x.to(device), batch)
         optimizer.zero_grad()
-        pred = model(sig, 48)
+        pred = model(sig)
         all_labels.extend(label.cpu().numpy())
         all_res.extend(pred.max(1)[1].cpu().numpy())
         loss, n_correct, cnt = cal_loss(pred, label, device)
@@ -114,7 +114,7 @@ def eval_epoch(valid_loader, device, model, total_num):
     with torch.no_grad():
         for batch in tqdm(valid_loader, mininterval=100, desc='- (Validation)  ', leave=False):
             sig, _, label, = map(lambda x: x.to(device), batch)
-            pred = model(sig, 48)
+            pred = model(sig)
             all_labels.extend(label.cpu().numpy())
             all_res.extend(pred.max(1)[1].cpu().numpy())
             all_pred.extend(pred.cpu().detach().numpy())
@@ -149,7 +149,7 @@ def test_epoch(valid_loader, device, model, total_num):
 
             sig, _, label, = map(lambda x: x.to(device), batch)
 
-            pred = model(sig, 48)  
+            pred = model(sig)
             all_labels.extend(label.cpu().numpy())
             all_res.extend(pred.max(1)[1].cpu().numpy())
             all_pred.extend(pred.cpu().numpy())
@@ -290,7 +290,7 @@ if __name__ == '__main__':
                               num_workers=2,
                               shuffle=True)
     
-    model = BiLSTM(48)
+    model = BiLSTM(vocab_size = 48, device = device)
 
     model = nn.DataParallel(model)
     model = model.to(device)
@@ -298,7 +298,7 @@ if __name__ == '__main__':
     
     optimizer = ScheduledOptim(
         Adam(filter(lambda x: x.requires_grad, model.parameters()),
-              betas=(0.9, 0.98), eps=1e-4, lr = 1e-5, weight_decay=1e-2), d_model, warm_steps)
+              betas=(0.9, 0.98), eps=1e-4, lr = 1e-4, weight_decay=1e-2), d_model, warm_steps)
     
     train_accs = []
     valid_accs = []
@@ -392,6 +392,6 @@ dic['valid_loss'] = valid_losses
 dic['epoch'] = epoch_label
 
 new_df = pd.DataFrame(dic)
-new_df.to_csv('acc_loss.csv')
+new_df.to_csv('baselines/eeg/eeg_bilstm_acc_loss.csv')
 
 writer.close()

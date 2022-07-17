@@ -181,9 +181,10 @@ class Fusion(nn.Module):
 
 class BiLSTM(nn.Module):
     #vocab_size = 48, 32, 838
-    def __init__(self, vocab_size, embedding_dim = 300, hidden_dim1 = 256, hidden_dim2 = 128, output_dim = 3, n_layers =2,
+    def __init__(self, vocab_size, device, embedding_dim = 100, hidden_dim1 = 128, hidden_dim2 = 64, output_dim = 3, n_layers =2,
                  dropout = 0.3, bidirectional = True, pad_index = 0):
         super().__init__()
+        self.device = device
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx = pad_index)
         self.lstm = nn.LSTM(embedding_dim,
                             hidden_dim1,
@@ -195,9 +196,18 @@ class BiLSTM(nn.Module):
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, text, text_lengths):
-        embedded = self.embedding(text)
-        packed_embedded = pack_padded_sequence(embedded, text_lengths, batch_first=True) 
+    def forward(self, text):
+        b, l = text.size()
+        # print(b)
+        # print(l)
+        text_lengths = torch.tensor([48]*b).cpu()
+        src_pos = torch.LongTensor(
+            [list(range(0, l)) for i in range(b)]
+        )
+        src_pos = src_pos.to(self.device)
+        # print(src_pos)
+        embedded = self.embedding(src_pos)
+        packed_embedded = pack_padded_sequence(embedded, text_lengths.cpu(), batch_first=True) 
 
         packed_output, (hidden, cell) = self.lstm(packed_embedded)
         cat = torch.cat((hidden[-2, :, :], hidden[-1, :, :]), dim=1)

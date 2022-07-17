@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from model_new import Transformer
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset, BalancedBatchSampler, Text_EEGDataset
+from dataset_new import BiLSTM, EEGDataset, TextDataset, BalancedBatchSampler, Text_EEGDataset
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -287,7 +287,7 @@ if __name__ == '__main__':
                               num_workers=2,
                               shuffle=True)
     
-    model = BiLSTM(32)
+    model = BiLSTM(vocab_size = 32, device = device)
 
     model = nn.DataParallel(model)
     model = model.to(device)
@@ -295,7 +295,7 @@ if __name__ == '__main__':
     
     optimizer = ScheduledOptim(
         Adam(filter(lambda x: x.requires_grad, model.parameters()),
-              betas=(0.9, 0.98), eps=1e-4, lr = 1e-5, weight_decay=1e-2), d_model, warm_steps)
+              betas=(0.9, 0.98), eps=1e-4, lr = 1e-4, weight_decay=1e-2), d_model, warm_steps)
     
     train_accs = []
     valid_accs = []
@@ -374,7 +374,6 @@ if __name__ == '__main__':
     
 
     test_model_name = 'baselines/text/' + str(r) + model_name
-    model = nn.DataParallel(model)
 
     chkpoint = torch.load(test_model_name, map_location='cuda')
     model.load_state_dict(chkpoint['model'])
@@ -391,6 +390,6 @@ dic['valid_loss'] = valid_losses
 dic['epoch'] = epoch_label
 
 new_df = pd.DataFrame(dic)
-new_df.to_csv('acc_loss.csv')
+new_df.to_csv('baselines/text/text_bilstm_acc_loss.csv')
 
 writer.close()
