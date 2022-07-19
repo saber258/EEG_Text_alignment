@@ -174,8 +174,8 @@ def test_epoch(valid_loader, device, model, total_num):
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_onlytext_bilstm'
-    model_name = f'{emotion}_baseline_onlytext_bilstm.chkpt'
+    model_name_base = 'baseline_onlytext_mlp'
+    model_name = f'{emotion}_baseline_onlytext_mlp.chkpt'
     
        # --- Preprocess
     df = pd.read_csv(f'preprocessed_eeg/{patient}_mean.csv')
@@ -393,6 +393,6 @@ dic['valid_loss'] = valid_losses
 dic['epoch'] = epoch_label
 
 new_df = pd.DataFrame(dic)
-new_df.to_csv('baselines/text/text_bilstm_acc_loss.csv')
+new_df.to_csv('baselines/text/text_mlp_acc_loss.csv')
 
 writer.close()

@@ -294,6 +294,7 @@ if __name__ == '__main__':
                               shuffle=True)
     
     model = BiLSTM(vocab_size = 838, device = device)
+    # model = BiLSTM(vocab_size = 838)
 
     model = nn.DataParallel(model)
     model = model.to(device)

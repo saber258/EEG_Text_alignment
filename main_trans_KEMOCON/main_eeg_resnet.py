@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from model_new import Transformer
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset, BalancedBatchSampler, Text_EEGDataset, BiLSTM, MLP
+from dataset_new import EEGDataset, ResNet1D, TextDataset, BalancedBatchSampler, Text_EEGDataset
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -149,7 +149,7 @@ def test_epoch(valid_loader, device, model, total_num):
 
             sig, _, label, = map(lambda x: x.to(device), batch)
 
-            pred = model(sig)
+            pred = model(sig)  
             all_labels.extend(label.cpu().numpy())
             all_res.extend(pred.max(1)[1].cpu().numpy())
             all_pred.extend(pred.cpu().numpy())
@@ -176,39 +176,36 @@ def test_epoch(valid_loader, device, model, total_num):
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_onlyeeg_mlp'
-    model_name = f'{emotion}_baseline_onlyeeg_mlp.chkpt'
+    model_name_base = 'baseline_onlyeeg_resnet'
+    model_name = f'{emotion}_baseline_onlyeeg_resnet.chkpt'
     
-       # --- Preprocess
-    df = pd.read_csv(f'preprocessed_eeg/{patient}_mean.csv')
+    # --- Preprocess
+    df = pd.read_csv('df.csv')
 
     X = df.drop([emotion], axis = 1)
     y= df[[emotion]]
 
-    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.3, shuffle = True)
+    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state = 2, test_size = 0.3, shuffle = True, stratify = y)
     ros = RandomOverSampler(random_state=2)
     X_resampled_text, y_resampled_text = ros.fit_resample(X_train, y_train)
 
-    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True)
+    
+
+    X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True, stratify = y_val)
     df_test = pd.concat([X_test, y_test], axis = 1)
     df_train = pd.concat([X_resampled_text, y_resampled_text], axis = 1)
+    # df_train = pd.concat([X_train, y_train], axis = 1)
     df_train = df_train.sample(frac=1).reset_index(drop=True)
     df_val = pd.concat([X_val, y_val], axis = 1)
 
     df_train_text = df_train[[emotion, 'new_words']]
-    df_train_eeg_label = df_train[[emotion]]
-    df_train_eeg = df_train.iloc[:, 3:]
-    df_train_eeg = pd.concat([df_train_eeg_label, df_train_eeg], axis=1)
+    df_train_eeg = df_train[eeg]
 
     df_val_text = df_val[[emotion, 'new_words']]
-    df_val_eeg_label = df_val[[emotion]]
-    df_val_eeg = df_val.iloc[:, 3:]
-    df_val_eeg = pd.concat([df_val_eeg_label, df_val_eeg], axis=1)
+    df_val_eeg = df_val[eeg]
 
     df_test_text = df_test[[emotion, 'new_words']]
-    df_test_eeg_label = df_test[[emotion]]
-    df_test_eeg = df_test.iloc[:, 3:]
-    df_test_eeg = pd.concat([df_test_eeg_label, df_test_eeg], axis=1)
+    df_test_eeg = df_test[eeg]
 
     # --- Save CSV
     df_train_text.to_csv('df_train_text.csv', header = None, index = False, index_label = False)
@@ -293,7 +290,15 @@ if __name__ == '__main__':
                               num_workers=2,
                               shuffle=True)
     
-    model = MLP(vocab_size = 838)
+
+    model = ResNet1D(
+        in_channels=1,
+        base_filters=48,
+        kernel_size=1,
+        stride=2,
+        groups = 2,
+        n_block = 3,
+        n_classes=3)
 
     model = nn.DataParallel(model)
     model = model.to(device)
@@ -301,7 +306,7 @@ if __name__ == '__main__':
     
     optimizer = ScheduledOptim(
         Adam(filter(lambda x: x.requires_grad, model.parameters()),
-              betas=(0.9, 0.98), eps=1e-4, lr = 1e-4, weight_decay=1e-2), d_model, warm_steps)
+              betas=(0.9, 0.98), eps=1e-4, lr = 1e-5, weight_decay=1e-2), d_model, warm_steps)
     
     train_accs = []
     valid_accs = []
@@ -310,9 +315,8 @@ if __name__ == '__main__':
     valid_losses = []
     valid_pred = []
     valid_label = []
-    epoch_label = []
+    
     for epoch_i in range(epoch):
-        epoch_label.append(epoch_i)
         print('[ Epoch', epoch_i, ']')
         start = time.time()
         train_loss, train_acc, train_cnt, train_cm = train_epoch(train_loader_text_eeg, device, model, optimizer, train_text_eeg.__len__())
@@ -350,7 +354,6 @@ if __name__ == '__main__':
         print("valid_cm:", valid_cm)
         writer.add_scalar('Accuracy', train_acc, epoch_i)
         writer.add_scalar('Loss', train_loss, epoch_i)
-
     np.savetxt(f'baselines/eeg/{emotion}_{model_name_base}_all_pred_val.txt',valid_pred)
     np.savetxt(f'baselines/eeg/{emotion}_{model_name_base}_all_label_val.txt', valid_label)
     print('ALL DONE')               
@@ -385,16 +388,4 @@ if __name__ == '__main__':
     model.load_state_dict(chkpoint['model'])
     model = model.to(device)
     test_epoch(test_loader_text_eeg, device, model, test_text_eeg.__len__())
-
-dic = {}
-
-dic['train_acc'] = train_accs
-dic['train_loss'] = train_losses
-dic['valid_acc'] = valid_accs
-dic['valid_loss'] = valid_losses
-dic['epoch'] = epoch_label
-
-new_df = pd.DataFrame(dic)
-new_df.to_csv('baselines/eeg/eeg_mlp_acc_loss.csv')
-
 writer.close()

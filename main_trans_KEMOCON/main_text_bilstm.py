@@ -83,6 +83,7 @@ def train_epoch(train_loader, device, model, optimizer, total_num):
     for batch in tqdm(train_loader, mininterval=100, desc='- (Training)  ', leave=False): 
 
         _, sig, label, = map(lambda x: x.to(device), batch)
+        # _, sig, label, = batch
         optimizer.zero_grad()
         pred = model(sig)
         all_labels.extend(label.cpu().numpy())
