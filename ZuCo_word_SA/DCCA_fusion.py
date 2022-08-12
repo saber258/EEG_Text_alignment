@@ -15,7 +15,7 @@ import pandas as pd
 from transformers.utils.dummy_pt_objects import OpenAIGPTForSequenceClassification
 from model_new import Transformer, Transformer2
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset, Fusion, Text_EEGDataset, Linear
+from dataset_new import EEGDataset, MLP, MLP2, TextDataset, Fusion, Text_EEGDataset, Linear
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -24,7 +24,7 @@ from roc_new import plot_roc
 from imblearn.over_sampling import SMOTE
 import time
 import os
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, BertModel, BertTokenizer
 from imblearn.over_sampling import RandomOverSampler
 from CCA import cca_loss, DeepCCA, DeepCCA_fusion
 from torch.utils.tensorboard import SummaryWriter
@@ -34,7 +34,7 @@ r=0
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
 FL = FocalLoss(class_num=3, gamma=1.5, average=False)
-tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
 
 
@@ -204,12 +204,72 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
     print(f'Test loss: {test_loss}')
 
 
+def get_embeddings(df):
+  words = df
+  
+  marked_texts = []
+  
+  for i in words:
+    marked_text = "[CLS] " + i + " [SEP]"
+    marked_texts.append(marked_text)
+
+  tokenized = []
+  for i in marked_texts:
+    tokenized_text = tokenizer.tokenize(i)
+    tokenized.append(tokenized_text)
+
+  index_token = []
+
+  for i in tokenized:
+    index_token.append(tokenizer.convert_tokens_to_ids(i))
+  
+  segments = []
+
+  for i in tokenized:
+    segments.append([1] * len(i))
+
+  tokens_tensors = []
+  for i in index_token:
+    tokens_tensor = torch.tensor([i])
+    tokens_tensors.append(tokens_tensor)
+
+  segment_tensors = []
+  for i in segments:
+    segments_tensors = torch.tensor([i])
+    segment_tensors.append(segments_tensors)
+
+  model = BertModel.from_pretrained('bert-base-uncased',
+                                  output_hidden_states = True, # Whether the model returns all hidden-states.
+                                  )
+
+  model.eval()
+
+  output = []
+  hidden_state = []
+  for i in range(len(tokens_tensors)):
+
+    with torch.no_grad():
+
+      outputs = model(tokens_tensors[i], segment_tensors[i])
+      output.append(outputs)
+
+      hidden_states = outputs[2]
+      hidden_state.append(hidden_states)
+
+  embeddings = []
+  for i in range(len(hidden_state)):
+    token_vecs = hidden_state[i][-2][0]
+    embedding = torch.mean(token_vecs, dim=0)
+    embeddings.append(embedding)
+
+  return embeddings
+
 if __name__ == '__main__':
-    model_name_base = 'baseline_DCCA_fusion_trans_test'
-    model_name = f'{emotion}_baseline_DCCA_fusion_trams_test.chkpt'
+    model_name_base = 'baseline_dcca_fusion'
+    model_name = f'{emotion}_baseline_dcca_fusion.chkpt'
     
     # --- Preprocess
-    df = pd.read_csv(f'preprocessed_eeg/{patient}_mean.csv')
+    df = pd.read_csv(f'preprocessed_eeg/{patient}_word.csv')
 
     X = df.drop([emotion], axis = 1)
     y= df[[emotion]]
@@ -226,18 +286,20 @@ if __name__ == '__main__':
 
     df_train_text = df_train[[emotion, 'new_words']]
     df_train_eeg_label = df_train[[emotion]]
-    df_train_eeg = df_train.iloc[:, 3:]
+    df_train_eeg = df_train.iloc[:, 2:]
+
     df_train_eeg = pd.concat([df_train_eeg_label, df_train_eeg], axis=1)
 
     df_val_text = df_val[[emotion, 'new_words']]
     df_val_eeg_label = df_val[[emotion]]
-    df_val_eeg = df_val.iloc[:, 3:]
+    df_val_eeg = df_val.iloc[:, 2:]
 
     df_val_eeg = pd.concat([df_val_eeg_label, df_val_eeg], axis=1)
 
     df_test_text = df_test[[emotion, 'new_words']]
     df_test_eeg_label = df_test[[emotion]]
-    df_test_eeg = df_test.iloc[:, 3:]
+    df_test_eeg = df_test.iloc[:, 2:]
+
     df_test_eeg = pd.concat([df_test_eeg_label, df_test_eeg], axis=1)
 
     # --- Save CSV
@@ -262,6 +324,7 @@ if __name__ == '__main__':
     df_test_eeg = pd.read_csv('df_test_eeg.csv', header = None).values
 
 
+
     time_start_i = time.time()
 
 
@@ -269,16 +332,23 @@ if __name__ == '__main__':
         device = torch.device('cuda')
     else:
         device = torch.device('cpu')
+
+    embeddings_train = get_embeddings(df_train_text[:,1])
+    embeddings_val = get_embeddings(df_val_text[:,1])
+    embeddings_test = get_embeddings(df_test_text[:,1])
+    # print(len(embeddings_train))
+    
+
     # --- Text and EEG
     train_text_eeg = Text_EEGDataset(
-        texts = df_train_text[:,1:],
+        texts = embeddings_train,
         labels = df_train_text[:,0],
         tokenizer = tokenizer,
         max_len = MAX_LEN,
         signals = df_train_eeg[:, 1:]
     )
     val_text_eeg = Text_EEGDataset(
-        texts = df_val_text[:, 1:],
+        texts = embeddings_val,
         labels = df_val_text[:, 0],
         tokenizer = tokenizer,
         max_len = MAX_LEN,
@@ -286,7 +356,7 @@ if __name__ == '__main__':
     )
 
     test_text_eeg = Text_EEGDataset(
-      texts = df_test_text[:, 1:],
+      texts = embeddings_test,
       labels = df_test_text[:, 0],
       tokenizer = tokenizer,
       max_len = MAX_LEN,
@@ -319,10 +389,13 @@ if __name__ == '__main__':
                               num_workers=2,
                               shuffle=True)
     
-    model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
+    # model1 = MLP(vocab_size = 32)
+    # model2 = MLP2(vocab_size = 838)
+    model1 = Transformer(device=device, d_feature=768, d_model=d_model, d_inner=d_inner,
                         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-    model2 = Transformer2(device=device, d_feature=838, d_model=d_model, d_inner=d_inner,
+    model2 = Transformer2(device=device, d_feature=832, d_model=d_model, d_inner=d_inner,
                         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+    
     # model1 = Linear(device, d_feature=32, class_num = 3)
     # model2 = Linear(device, d_feature = 839, class_num=3)
     model1 = nn.DataParallel(model1)
@@ -361,7 +434,8 @@ if __name__ == '__main__':
     valid_losses = []
     all_pred_val = []
     all_labels_val = []
-    
+    epochs = []
+
     for epoch_i in range(epoch):
         print('[ Epoch', epoch_i, ']')
         start = time.time()
@@ -404,6 +478,17 @@ if __name__ == '__main__':
         print("valid_cm:", valid_cm)
         writer.add_scalar('Accuracy', train_acc, epoch_i)
         writer.add_scalar('Loss', train_loss, epoch_i)
+        epochs.append(epoch_i)
+
+    dic = {}
+
+    dic['train_acc'] = train_accs
+    dic['train_loss'] = train_losses
+    dic['valid_acc'] = valid_accs
+    dic['valid_loss'] = valid_losses
+    dic['epoch'] = epochs
+    new_df = pd.DataFrame(dic)
+    new_df.to_csv('baselines/DCCA_fusion/dcca_fusion_acc_loss.csv')
 
         
     
@@ -416,7 +501,7 @@ if __name__ == '__main__':
     plt.plot(train_losses, label = 'train')
     plt.plot(valid_losses, label= 'valid')
     plt.xlabel('epoch')
-    plt.ylim([0.0, 2])
+    plt.ylim([0,2])
     plt.ylabel('loss')
     plt.legend(loc ="upper right")
     plt.title('loss change curve')
@@ -438,32 +523,7 @@ if __name__ == '__main__':
     test_model_name = 'baselines/DCCA_fusion/'+str(r) + model_name
     
     chkpoint = torch.load(test_model_name, map_location='cuda')
-    # model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
-    #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-    # model2 = Transformer2(device=device, d_feature=839, d_model=d_model, d_inner=d_inner,
-    #                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-    # model1 = nn.DataParallel(model1)
-    # model2 = nn.DataParallel(model2)
     
-    # chkpt1 = torch.load(torchload, map_location = 'cuda')
-    # chkpt2 = torch.load(torchload2, map_location = 'cuda')
-
-    # model1.load_state_dict(chkpt1['model'])
-    # model2.load_state_dict(chkpt2['model'])
-
-
-    # model2 = model2.to(device)
-    # model1 = model1.to(device)
-
-    # model3 = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
-    # model = nn.DataParallel(model)
-    # chkpt = torch.load(torchload3, map_location = 'cuda')
-    # model3.load_state_dict(chkpt['model'])
-    # model = model.to(device)
-
-    model = DeepCCA_fusion(model3, outdim_size = outdim_size,d_feature = 6,
-      d_model = d_model, d_inner = d_inner,n_layers = num_layers, n_head = num_heads, d_k=64, d_v=64, dropout = 0.5,
-        class_num=3, use_all_singular_values = False).to(device)
     model.load_state_dict(chkpoint['model'])
     model = model.to(device)
     test_epoch(test_loader_text_eeg, device, model, test_text_eeg.__len__(), test_text_eeg.__len__())

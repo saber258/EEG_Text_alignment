@@ -52,7 +52,7 @@ def cal_loss(pred1, label1, pred2, device):
 
     pred1 = pred1.max(1)[1]
     pred2 = pred2.max(1)[1]
-    n_correct3 = pred1.eq(label1).sum().item()
+    n_correct3 = pred2.eq(label1).sum().item()
     n_correct = n_correct3
     return loss, n_correct
 

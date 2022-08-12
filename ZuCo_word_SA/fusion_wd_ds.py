@@ -23,7 +23,7 @@ from roc_new import plot_roc
 from imblearn.over_sampling import SMOTE
 import time
 import os
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, BertModel, BertTokenizer
 from imblearn.over_sampling import RandomOverSampler
 from CCA import cca_loss, DeepCCA
 from scipy.stats import wasserstein_distance
@@ -36,7 +36,7 @@ r=0
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
 FL = FocalLoss(class_num=3, gamma=1.5, average=False)
-tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
 
 
@@ -44,7 +44,7 @@ def cal_loss(pred1, label1, pred2, device):
 
     cnt_per_class = np.zeros(3)
 
-    loss2 = F.cross_entropy(pred1, label1, reduction = 'sum')
+    loss2 = F.cross_entropy(pred2, label1, reduction = 'sum')
     loss1 = wasserstein_distance(pred1.cpu().detach().numpy().flatten(), 
     pred2.cpu().detach().numpy().flatten())
 
@@ -55,7 +55,7 @@ def cal_loss(pred1, label1, pred2, device):
    
     # loss = loss1 + loss2
     loss = loss1 + loss2
-    n_correct3 = pred1.eq(label1).sum().item()
+    n_correct3 = pred2.eq(label1).sum().item()
     n_correct = n_correct3
     return loss, n_correct
 
@@ -103,8 +103,8 @@ def train_epoch(train_loader1, device, model, optimizer, total_num, total_num2):
       optimizer.zero_grad()
       pred1, pred2 = model(sig1, sig2)
       all_labels.extend(label1.cpu().numpy())
-      all_res.extend(pred1.max(1)[1].cpu().numpy())
-      all_pred.extend(pred1.cpu().detach().numpy())
+      all_res.extend(pred2.max(1)[1].cpu().numpy())
+      all_pred.extend(pred2.cpu().detach().numpy())
     
       loss, n_correct1 = cal_loss(pred1, label1, pred2, device)
       
@@ -143,9 +143,9 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
       
         pred1, pred2 = model(sig1, sig2)
         all_labels.extend(label1.cpu().numpy())
-        all_res.extend(pred1.max(1)[1].cpu().numpy())
+        all_res.extend(pred2.max(1)[1].cpu().numpy())
         loss, n_correct1 = cal_loss(pred1, label1, pred2,device)
-        all_pred.extend(pred1.cpu().detach().numpy())
+        all_pred.extend(pred2.cpu().detach().numpy())
 
   
         total_loss += loss.item()
@@ -177,8 +177,8 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
         sig2, sig1, label1, = map(lambda x: x.to(device), batch)
         pred1, pred2 = model(sig1, sig2)  
         all_labels.extend(label1.cpu().numpy())
-        all_res.extend(pred1.max(1)[1].cpu().numpy())
-        all_pred.extend(pred1.cpu().numpy())
+        all_res.extend(pred2.max(1)[1].cpu().numpy())
+        all_pred.extend(pred2.cpu().numpy())
         loss, n_correct1 = cal_loss(pred1, label1, pred2, device)
 
 
@@ -205,13 +205,72 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
     total_loss = total_loss / total_num
     print(f'Test loss: {total_loss}')
 
+def get_embeddings(df):
+  words = df
+  
+  marked_texts = []
+  
+  for i in words:
+    marked_text = "[CLS] " + i + " [SEP]"
+    marked_texts.append(marked_text)
+
+  tokenized = []
+  for i in marked_texts:
+    tokenized_text = tokenizer.tokenize(i)
+    tokenized.append(tokenized_text)
+
+  index_token = []
+
+  for i in tokenized:
+    index_token.append(tokenizer.convert_tokens_to_ids(i))
+  
+  segments = []
+
+  for i in tokenized:
+    segments.append([1] * len(i))
+
+  tokens_tensors = []
+  for i in index_token:
+    tokens_tensor = torch.tensor([i])
+    tokens_tensors.append(tokens_tensor)
+
+  segment_tensors = []
+  for i in segments:
+    segments_tensors = torch.tensor([i])
+    segment_tensors.append(segments_tensors)
+
+  model = BertModel.from_pretrained('bert-base-uncased',
+                                  output_hidden_states = True, # Whether the model returns all hidden-states.
+                                  )
+
+  model.eval()
+
+  output = []
+  hidden_state = []
+  for i in range(len(tokens_tensors)):
+
+    with torch.no_grad():
+
+      outputs = model(tokens_tensors[i], segment_tensors[i])
+      output.append(outputs)
+
+      hidden_states = outputs[2]
+      hidden_state.append(hidden_states)
+
+  embeddings = []
+  for i in range(len(hidden_state)):
+    token_vecs = hidden_state[i][-2][0]
+    embedding = torch.mean(token_vecs, dim=0)
+    embeddings.append(embedding)
+
+  return embeddings
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_fusion_wd_text_trans'
-    model_name = f'{emotion}_baseline_fusion_wd_text_trans.chkpt'
+    model_name_base = 'baseline_wd_eeg'
+    model_name = f'{emotion}_baseline_wd_eeg.chkpt'
     
     # --- Preprocess
-    df = pd.read_csv(f'preprocessed_eeg/{patient}_mean.csv')
+    df = pd.read_csv(f'preprocessed_eeg/{patient}_word.csv')
 
     X = df.drop([emotion], axis = 1)
     y= df[[emotion]]
@@ -228,18 +287,19 @@ if __name__ == '__main__':
 
     df_train_text = df_train[[emotion, 'new_words']]
     df_train_eeg_label = df_train[[emotion]]
-    df_train_eeg = df_train.iloc[:, 3:]
+    df_train_eeg = df_train.iloc[:, 2:]
     df_train_eeg = pd.concat([df_train_eeg_label, df_train_eeg], axis=1)
 
     df_val_text = df_val[[emotion, 'new_words']]
     df_val_eeg_label = df_val[[emotion]]
-    df_val_eeg = df_val.iloc[:, 3:]
+    df_val_eeg = df_val.iloc[:, 2:]
 
     df_val_eeg = pd.concat([df_val_eeg_label, df_val_eeg], axis=1)
 
     df_test_text = df_test[[emotion, 'new_words']]
     df_test_eeg_label = df_test[[emotion]]
-    df_test_eeg = df_test.iloc[:, 3:]
+    df_test_eeg = df_test.iloc[:, 2:]
+
     df_test_eeg = pd.concat([df_test_eeg_label, df_test_eeg], axis=1)
 
     # --- Save CSV
@@ -264,6 +324,7 @@ if __name__ == '__main__':
     df_test_eeg = pd.read_csv('df_test_eeg.csv', header = None).values
 
 
+
     time_start_i = time.time()
 
 
@@ -271,16 +332,23 @@ if __name__ == '__main__':
         device = torch.device('cuda')
     else:
         device = torch.device('cpu')
+
+    embeddings_train = get_embeddings(df_train_text[:,1])
+    embeddings_val = get_embeddings(df_val_text[:,1])
+    embeddings_test = get_embeddings(df_test_text[:,1])
+    # print(len(embeddings_train))
+    
+
     # --- Text and EEG
     train_text_eeg = Text_EEGDataset(
-        texts = df_train_text[:,1:],
+        texts = embeddings_train,
         labels = df_train_text[:,0],
         tokenizer = tokenizer,
         max_len = MAX_LEN,
         signals = df_train_eeg[:, 1:]
     )
     val_text_eeg = Text_EEGDataset(
-        texts = df_val_text[:, 1:],
+        texts = embeddings_val,
         labels = df_val_text[:, 0],
         tokenizer = tokenizer,
         max_len = MAX_LEN,
@@ -288,13 +356,14 @@ if __name__ == '__main__':
     )
 
     test_text_eeg = Text_EEGDataset(
-      texts = df_test_text[:, 1:],
+      texts = embeddings_test,
       labels = df_test_text[:, 0],
       tokenizer = tokenizer,
       max_len = MAX_LEN,
       signals = df_test_eeg[:, 1:]
 
     )
+    
     
     # --- Sampler
     target = df_train_text[:, 0].astype('int')
@@ -321,9 +390,9 @@ if __name__ == '__main__':
                               num_workers=2,
                               shuffle=True)
     
-    model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
+    model1 = Transformer(device=device, d_feature=768, d_model=d_model, d_inner=d_inner,
                         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-    model2 = Transformer2(device=device, d_feature=838, d_model=d_model, d_inner=d_inner,
+    model2 = Transformer2(device=device, d_feature=832, d_model=d_model, d_inner=d_inner,
                         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
     model1 = nn.DataParallel(model1)
     model2 = nn.DataParallel(model2)
@@ -365,6 +434,7 @@ if __name__ == '__main__':
     pred_train = []
     pred2_train = []
     label_val = []
+    epochs = []
     
     for epoch_i in range(epoch):
         print('[ Epoch', epoch_i, ']')
@@ -411,6 +481,17 @@ if __name__ == '__main__':
     
         writer.add_scalar('Accuracy', train_acc, epoch_i)
         writer.add_scalar('Loss', train_loss, epoch_i)
+        epochs.append(epoch_i)
+
+    dic = {}
+
+    dic['train_acc'] = train_accs
+    dic['train_loss'] = train_losses
+    dic['valid_acc'] = valid_accs
+    dic['valid_loss'] = valid_losses
+    dic['epoch'] = epochs
+    new_df = pd.DataFrame(dic)
+    new_df.to_csv('baselines/fusion_wd_ds/wd_eeg_acc_loss.csv')
 
     
 
