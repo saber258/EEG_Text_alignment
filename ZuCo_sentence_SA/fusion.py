@@ -189,7 +189,7 @@ if __name__ == '__main__':
     model_name = f'{emotion}_baseline_fusion_linout.chkpt'
     
     # --- Preprocess
-    df = pd.read_csv(f'preprocessed_eeg/{patient}_mean.csv')
+    df = pd.read_csv(f'preprocessed_eeg/{patient}_word.csv')
 
     X = df.drop([emotion], axis = 1)
     y= df[[emotion]]
@@ -301,7 +301,7 @@ if __name__ == '__main__':
     
     model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
                         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-    model2 = Transformer2(device=device, d_feature=838, d_model=d_model, d_inner=d_inner,
+    model2 = Transformer2(device=device, d_feature=1598, d_model=d_model, d_inner=d_inner,
                         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
     model1 = nn.DataParallel(model1)
     model2 = nn.DataParallel(model2)

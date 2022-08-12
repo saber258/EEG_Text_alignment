@@ -77,7 +77,7 @@ class Text_EEGDataset(Dataset):
     self.labels = labels
     self.tokenizer = tokenizer
     self.max_len = max_len
-    self.signals = signals
+    self.signals = torch.FloatTensor(signals)
 
   @property
   def n_insts(self):
@@ -101,16 +101,7 @@ class Text_EEGDataset(Dataset):
     input_ids = [self.tokenizer.encode(text, add_special_tokens=False,max_length=MAX_LEN, padding = 'max_length', truncation = True, return_token_type_ids = False, return_attention_mask = True)]   
     input_ids = np.array(input_ids)
     input_ids = stats.zscore(input_ids, axis=None, nan_policy='omit')
-    input_ids = np.array(input_ids)
-    # print(input_ids.shape)
-    # print('hello')
-    # x = torch.FloatTensor(input_ids)
-    # print(x.shape)
-    signal = np.array([signal])
-    signal = torch.FloatTensor(signal)
-    # print(signal.shape)
-    return signal, torch.FloatTensor(input_ids), torch.tensor(label, dtype=torch.long)
-
+    return signal, torch.FloatTensor(input_ids).flatten(), torch.tensor(label, dtype=torch.long)
 
 class Linear(nn.Module):
   def __init__(self, device, d_feature, class_num):

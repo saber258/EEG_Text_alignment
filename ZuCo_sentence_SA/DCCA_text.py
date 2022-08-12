@@ -305,11 +305,11 @@ if __name__ == '__main__':
     model1 = nn.DataParallel(model1)
     model2 = nn.DataParallel(model2)
     
-    chkpt1 = torch.load(torchload, map_location = 'cuda')
-    chkpt2 = torch.load(torchload2, map_location = 'cuda')
+    # chkpt1 = torch.load(torchload, map_location = 'cuda')
+    # chkpt2 = torch.load(torchload2, map_location = 'cuda')
 
-    model1.load_state_dict(chkpt1['model'])
-    model2.load_state_dict(chkpt2['model'])
+    # model1.load_state_dict(chkpt1['model'])
+    # model2.load_state_dict(chkpt2['model'])
 
     # model1 = Linear(device, 32, class_num)
 

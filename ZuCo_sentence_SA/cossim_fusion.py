@@ -45,11 +45,14 @@ def cal_loss(pred1, pred2, label1, out, device):
     loss2 = nn.CosineSimilarity()
     loss2 = loss2(pred1, pred2)
     loss2 = torch.sum(loss2)
-    # print(loss)
+ 
     loss2 = -loss2
+  
 
     loss1 = F.cross_entropy(out, label1, reduction = 'sum')
+  
     loss = loss2 + loss1
+
     out = out.max(1)[1]
    
     n_correct2 = out.eq(label1).sum().item()

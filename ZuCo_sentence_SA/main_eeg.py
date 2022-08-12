@@ -299,7 +299,7 @@ if __name__ == '__main__':
                               num_workers=2,
                               shuffle=True)
     
-    model = Transformer(device=device, d_feature=838, d_model=d_model, d_inner=d_inner,
+    model = Transformer(device=device, d_feature=1598, d_model=d_model, d_inner=d_inner,
                         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
 
     model = nn.DataParallel(model)
@@ -385,10 +385,7 @@ if __name__ == '__main__':
     
 
     test_model_name = 'baselines/eeg/' + str(r) + model_name
-    model = Transformer(device=device, d_feature=838, d_model=d_model, d_inner=d_inner,
-                        n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout,
-                        class_num=class_num)
-    model = nn.DataParallel(model)
+    
 
     chkpoint = torch.load(test_model_name, map_location='cuda')
     model.load_state_dict(chkpoint['model'])

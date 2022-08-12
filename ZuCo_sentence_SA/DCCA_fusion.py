@@ -15,7 +15,7 @@ import pandas as pd
 from transformers.utils.dummy_pt_objects import OpenAIGPTForSequenceClassification
 from model_new import Transformer, Transformer2
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset, Fusion, Text_EEGDataset, Linear
+from dataset_new import EEGDataset, MLP, MLP2, TextDataset, Fusion, Text_EEGDataset, Linear
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -205,8 +205,8 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
 
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_DCCA_fusion_trans_test'
-    model_name = f'{emotion}_baseline_DCCA_fusion_trams_test.chkpt'
+    model_name_base = 'baseline_DCCA_only_trans'
+    model_name = f'{emotion}_baseline_DCCA_only_trans.chkpt'
     
     # --- Preprocess
     df = pd.read_csv(f'preprocessed_eeg/{patient}_mean.csv')
@@ -319,10 +319,8 @@ if __name__ == '__main__':
                               num_workers=2,
                               shuffle=True)
     
-    model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
-                        n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-    model2 = Transformer2(device=device, d_feature=838, d_model=d_model, d_inner=d_inner,
-                        n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
+    model1 = MLP(vocab_size = 32)
+    model2 = MLP2(vocab_size = 838)
     # model1 = Linear(device, d_feature=32, class_num = 3)
     # model2 = Linear(device, d_feature = 839, class_num=3)
     model1 = nn.DataParallel(model1)
@@ -416,7 +414,7 @@ if __name__ == '__main__':
     plt.plot(train_losses, label = 'train')
     plt.plot(valid_losses, label= 'valid')
     plt.xlabel('epoch')
-    plt.ylim([0.0, 2])
+    plt.ylim([0,2])
     plt.ylabel('loss')
     plt.legend(loc ="upper right")
     plt.title('loss change curve')
