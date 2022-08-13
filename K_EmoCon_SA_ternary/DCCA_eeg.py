@@ -36,7 +36,6 @@ tokenizer = BertTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 def cal_loss(pred, label, pred2, device):
 
-
     loss1 = F.cross_entropy(pred, label, reduction='sum')
     loss2 = model.loss
     loss2 = loss2(pred, pred2)
@@ -74,7 +73,6 @@ def train_epoch(train_loader, device, model, optimizer, total_num):
     model.train()
     total_loss = 0
     total_correct = 0    
-    
     
     for batch in tqdm(train_loader, mininterval=100, desc='- (Training)  ', leave=False): 
 
@@ -123,14 +121,12 @@ def eval_epoch(valid_loader, device, model, total_num):
     print('F1_i is : {F1_i}'.format(F1_i=F1_i))
     valid_loss = total_loss / total_num
     valid_acc = total_correct / total_num
-    return valid_loss, valid_acc, cnt_per_class, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4, all_pred, all_labels
+    return valid_loss, valid_acc, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4, all_pred, all_labels
 
 
 def test_epoch(valid_loader, device, model, total_num):
     all_labels = []
     all_res = []
-    all_pres = []
-    all_recs = []
     all_pred = []
     model.eval()
     total_loss = 0
@@ -148,6 +144,7 @@ def test_epoch(valid_loader, device, model, total_num):
 
             total_loss += loss.item()
             total_correct += n_correct
+
 
     np.savetxt(f'baselines/DCCA_ds/{emotion}_{model_name_base}_all_pred.txt',all_pred)
     np.savetxt(f'baselines/DCCA_ds/{emotion}_{model_name_base}_all_label.txt', all_labels)

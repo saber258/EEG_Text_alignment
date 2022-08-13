@@ -16,7 +16,6 @@ from model_new import Transformer, Transformer2, Fusion
 from optim_new import ScheduledOptim
 from dataset_new import Text_EEGDataset
 from config import *
-from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
 import matplotlib.pyplot as plt
 from roc_new import plot_roc
@@ -32,7 +31,6 @@ r=0
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
-FL = FocalLoss(class_num=3, gamma=1.5, average=False)
 tokenizer = BertTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 
@@ -361,7 +359,7 @@ if __name__ == '__main__':
 
   
     model = Fusion(device=device, model1 = model1, model2 = model2,
-    d_feature =4, d_model=d_model, d_inner=d_inner,
+    d_feature =6, d_model=d_model, d_inner=d_inner,
     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num).to(device)
   
 

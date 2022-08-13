@@ -376,9 +376,9 @@ if __name__ == '__main__':
 
     model3 = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
 
-    model = DeepCCA_fusion(model3, outdim_size = outdim_size, use_all_singular_values = False, d_feature = 6, d_model = d_model, d_inner = d_inner,
+    model = DeepCCA_fusion(model3, outdim_size = outdim_size, use_all_singular_values = False, d_feature = 4, d_model = d_model, d_inner = d_inner,
         n_layers=num_layers, n_head = num_heads, d_k=64, d_v=64, dropout = 0.1,
-        class_num=3, device=torch.device('cuda'))
+        class_num=2, device=torch.device('cuda'))
     
     model= model.to(device)
 

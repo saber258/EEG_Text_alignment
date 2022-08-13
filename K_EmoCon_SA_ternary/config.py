@@ -15,13 +15,14 @@ Fea_PLUS = 2
 # SIG_LEN = 48
 SIG_LEN = 768
 SIG_LEN2 = 48
-SIG_LEN3 = 4
+SIG_LEN3 = 6
 MAX_LEN = 32
 PRE_TRAINED_MODEL_NAME = 'bert-base-uncased'
 
 # --- pick from [happy_trans, happy2_trans, angry_trans, angry2_trans, sad_trans, sad2_trans, nervous_trans, nervous2_trans]
-emotion = 'arousal_trans'
+emotion = 'sad_trans'
 csv = 'df.csv'
+patient = 'ZAB'
 
 eeg = [emotion, 'delta0', 'lowAlpha0', 'highAlpha0','lowBeta0','highBeta0', 'lowGamma0', 'middleGamma0', 'theta0',
          'delta1', 'lowAlpha1', 'highAlpha1', 'lowBeta1', 'highBeta1', 'lowGamma1', 'middleGamma1', 'theta1',
