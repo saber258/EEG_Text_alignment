@@ -36,16 +36,13 @@ tokenizer = BertTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 def cal_loss(pred, label, pred2, device):
 
-    cnt_per_class = np.zeros(2)
-
     loss1 = F.cross_entropy(pred, label, reduction='sum')
     loss2 = model.loss
     loss2 = loss2(pred, pred2)
     loss = loss2+loss1
     pred = pred.max(1)[1]
     n_correct = pred.eq(label).sum().item()
-    cnt_per_class = [cnt_per_class[j] + pred.eq(j).sum().item() for j in range(class_num)]
-    return loss, n_correct, cnt_per_class
+    return loss, n_correct
 
 
 def cal_statistic(cm):
@@ -75,10 +72,7 @@ def train_epoch(train_loader, device, model, optimizer, total_num):
     all_pred_train = []
     model.train()
     total_loss = 0
-    total_correct = 0
-    cnt_per_class = np.zeros(class_num)
-    
-    
+    total_correct = 0    
     
     for batch in tqdm(train_loader, mininterval=100, desc='- (Training)  ', leave=False): 
 
@@ -88,18 +82,17 @@ def train_epoch(train_loader, device, model, optimizer, total_num):
         all_labels.extend(label.cpu().numpy())
         all_res.extend(pred.max(1)[1].cpu().numpy())
         all_pred_train.extend(pred.detach().cpu().numpy())
-        loss, n_correct, cnt = cal_loss(pred, label, pred2, device)
+        loss, n_correct = cal_loss(pred, label, pred2, device)
         loss.backward()
         optimizer.step_and_update_lr()
 
         total_loss += loss.item()
         total_correct += n_correct
-        cnt_per_class += cnt
         cm = confusion_matrix(all_labels, all_res)
 
     train_loss = total_loss / total_num
     train_acc = total_correct / total_num
-    return train_loss, train_acc, cnt_per_class, cm, all_pred_train, all_labels
+    return train_loss, train_acc, cm, all_pred_train, all_labels
 
 
 def eval_epoch(valid_loader, device, model, total_num):
@@ -109,7 +102,6 @@ def eval_epoch(valid_loader, device, model, total_num):
     model.eval()
     total_loss = 0
     total_correct = 0
-    cnt_per_class = np.zeros(class_num)
     with torch.no_grad():
         for batch in tqdm(valid_loader, mininterval=100, desc='- (Validation)  ', leave=False):
             sig2, sig1, label, = map(lambda x: x.to(device), batch)
@@ -117,11 +109,10 @@ def eval_epoch(valid_loader, device, model, total_num):
             all_labels.extend(label.cpu().numpy())
             all_res.extend(pred.max(1)[1].cpu().numpy())
             all_pred.extend(pred.detach().cpu().numpy())
-            loss, n_correct, cnt = cal_loss(pred, label, pred2, device)
+            loss, n_correct = cal_loss(pred, label, pred2, device)
 
             total_loss += loss.item()
             total_correct += n_correct
-            cnt_per_class += cnt
     cm = confusion_matrix(all_labels, all_res)
     acc_SP, pre_i, rec_i, F1_i = cal_statistic(cm)
     print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP))
@@ -130,19 +121,16 @@ def eval_epoch(valid_loader, device, model, total_num):
     print('F1_i is : {F1_i}'.format(F1_i=F1_i))
     valid_loss = total_loss / total_num
     valid_acc = total_correct / total_num
-    return valid_loss, valid_acc, cnt_per_class, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4, all_pred, all_labels
+    return valid_loss, valid_acc, cm, sum(rec_i[1:]) * 0.6 + sum(pre_i[1:]) * 0.4, all_pred, all_labels
 
 
 def test_epoch(valid_loader, device, model, total_num):
     all_labels = []
     all_res = []
-    all_pres = []
-    all_recs = []
     all_pred = []
     model.eval()
     total_loss = 0
     total_correct = 0
-    cnt_per_class = np.zeros(class_num)
     with torch.no_grad():
         for batch in tqdm(valid_loader, mininterval=0.5, desc='- (Validation)  ', leave=False):
 
@@ -152,11 +140,10 @@ def test_epoch(valid_loader, device, model, total_num):
             all_labels.extend(label.cpu().numpy())
             all_res.extend(pred.max(1)[1].cpu().numpy())
             all_pred.extend(pred.cpu().numpy())
-            loss, n_correct, cnt = cal_loss(pred, label, pred2, device)
+            loss, n_correct = cal_loss(pred, label, pred2, device)
 
             total_loss += loss.item()
             total_correct += n_correct
-            cnt_per_class += cnt
 
 
     np.savetxt(f'baselines/DCCA_ds/{emotion}_{model_name_base}_all_pred.txt',all_pred)
@@ -381,14 +368,14 @@ if __name__ == '__main__':
     for epoch_i in range(epoch):
         print('[ Epoch', epoch_i, ']')
         start = time.time()
-        train_loss, train_acc, train_cnt, train_cm, all_pred_train, all_label_train = train_epoch(train_loader_text_eeg, device, model, optimizer, train_text_eeg.__len__())
+        train_loss, train_acc, train_cm, all_pred_train, all_label_train = train_epoch(train_loader_text_eeg, device, model, optimizer, train_text_eeg.__len__())
 
         all_pred_train1.extend(all_pred_train)
         all_label_train1.extend(all_label_train)
         train_accs.append(train_acc)
         train_losses.append(train_loss)
         start = time.time()
-        valid_loss, valid_acc, valid_cnt, valid_cm, eva_indi, all_pred_val, all_label_val = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__())
+        valid_loss, valid_acc, valid_cm, eva_indi, all_pred_val, all_label_val = eval_epoch(valid_loader_text_eeg, device, model, val_text_eeg.__len__())
 
         all_pred_val1.extend(all_pred_val)
         all_label_val1.extend(all_label_val)

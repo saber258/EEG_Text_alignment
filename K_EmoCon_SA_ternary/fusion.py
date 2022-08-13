@@ -12,9 +12,9 @@ from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
-from model_new import Transformer, Transformer2
+from model_new import Transformer, Transformer2, Fusion
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, TextDataset, Fusion, Text_EEGDataset
+from dataset_new import Text_EEGDataset
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -23,7 +23,7 @@ from roc_new import plot_roc
 from imblearn.over_sampling import SMOTE
 import time
 import os
-from transformers import AutoTokenizer
+from transformers import BertTokenizer, BertModel
 from imblearn.over_sampling import RandomOverSampler
 from torch.utils.tensorboard import SummaryWriter
 writer = SummaryWriter()
@@ -33,25 +33,20 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
 FL = FocalLoss(class_num=3, gamma=1.5, average=False)
-tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
+tokenizer = BertTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 
 def cal_loss(pred, label, device):
 
-    cnt_per_class = np.zeros(3)
-
     loss = F.cross_entropy(pred, label, reduction='sum')
     pred = pred.max(1)[1]
     n_correct = pred.eq(label).sum().item()
-    cnt_per_class = [cnt_per_class[j] + pred.eq(j).sum().item() for j in range(class_num)]
-    return loss, n_correct, cnt_per_class
+    return loss, n_correct
 
 
 def cal_statistic(cm):
     total_pred = cm.sum(0)
-    # print(total_pred)
     total_true = cm.sum(1)
-    # print(total_true)
 
     acc_SP = sum([cm[i, i] for i in range(1, class_num)]) / total_pred[1: class_num].sum()
     pre_i = [cm[i, i] / total_pred[i] for i in range(class_num)]
@@ -77,7 +72,6 @@ def train_epoch(train_loader, device, model, optimizer, total_num, total_num2):
     all_pred = []
     total_loss = 0
     total_correct = 0
-    #cnt_per_class = np.zeros(class_num)
 
     for batch in tqdm(train_loader, mininterval=100, desc='- (Training)  ', leave=False): 
 
@@ -89,16 +83,14 @@ def train_epoch(train_loader, device, model, optimizer, total_num, total_num2):
       all_labels.extend(label1.cpu().numpy())
       all_res.extend(pred1.max(1)[1].cpu().numpy())
       all_pred.extend(pred1.cpu().detach().numpy())
-      loss, n_correct1, cnt1 = cal_loss(pred1, label1, device)
+      loss, n_correct1 = cal_loss(pred1, label1, device)
       
     
       loss.backward()
       optimizer.step_and_update_lr()
       total_loss += loss.item()
       total_correct += (n_correct1)
-  
-    #cnt_per_class += (cnt1 + cnt2)
-  
+    
       cm = confusion_matrix(all_labels, all_res)
     
 
@@ -116,7 +108,6 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
     all_pred = []
     total_loss = 0
     total_correct = 0
-    cnt_per_class = np.zeros(class_num)
 
     with torch.no_grad():
       
@@ -129,7 +120,7 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
         all_labels.extend(label1.cpu().numpy())
         all_res.extend(pred1.max(1)[1].cpu().numpy())
         all_pred.extend(pred1.cpu().detach().numpy())
-        loss, n_correct1, cnt1 = cal_loss(pred1, label1, device)
+        loss, n_correct1 = cal_loss(pred1, label1, device)
     
         
   
@@ -150,8 +141,6 @@ def eval_epoch(valid_loader1, device, model, total_num, total_num2):
 def test_epoch(valid_loader, device, model, total_num, total_num2):
     all_labels = []
     all_res = []
-    all_pres = []
-    all_recs = []
     all_pred = []
     model.eval()
     total_loss = 0
@@ -166,15 +155,13 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
         all_labels.extend(label1.cpu().numpy())
         all_res.extend(pred1.max(1)[1].cpu().numpy())
         all_pred.extend(pred1.cpu().numpy())
-        loss, n_correct1, cnt1 = cal_loss(pred1, label1,device)
+        loss, n_correct1 = cal_loss(pred1, label1,device)
         total_loss += loss.item()
         total_correct += (n_correct1)
-            #cnt_per_class += (cnt1 + cnt2)
 
     np.savetxt(f'baselines/text_eeg_fusion/{emotion}_{model_name_base}_all_pred.txt',all_pred)
     np.savetxt(f'baselines/text_eeg_fusion/{emotion}_{model_name_base}_all_label.txt', all_labels)
     all_pred = np.array(all_pred)
-    plot_roc(all_labels,all_pred)
     cm = confusion_matrix(all_labels, all_res)
     print("test_cm:", cm)
     acc_SP, pre_i, rec_i, F1_i = cal_statistic(cm)
@@ -185,12 +172,71 @@ def test_epoch(valid_loader, device, model, total_num, total_num2):
     test_acc = total_correct / total_num 
     print('test_acc is : {test_acc}'.format(test_acc=test_acc))
 
+def get_embeddings(df, device):
+  words = df
+  
+  marked_texts = []
+  
+  for i in words:
+    marked_text = "[CLS] " + i + " [SEP]"
+    marked_texts.append(marked_text)
+
+  tokenized = []
+  for i in marked_texts:
+    tokenized_text = tokenizer.tokenize(i)
+    tokenized.append(tokenized_text)
+
+  index_token = []
+
+  for i in tokenized:
+    index_token.append(tokenizer.convert_tokens_to_ids(i))
+  
+  segments = []
+
+  for i in tokenized:
+    segments.append([1] * len(i))
+
+  tokens_tensors = []
+  for i in index_token:
+    tokens_tensor = torch.tensor([i])
+    tokens_tensors.append(tokens_tensor)
+
+  segment_tensors = []
+  for i in segments:
+    segments_tensors = torch.tensor([i])
+    segment_tensors.append(segments_tensors)
+
+  model = BertModel.from_pretrained('bert-base-uncased',
+                                  output_hidden_states = True, 
+                                  ).to(device)
+
+  model.eval()
+
+  output = []
+  hidden_state = []
+  for i in range(len(tokens_tensors)):
+
+    with torch.no_grad():
+
+      outputs = model(tokens_tensors[i], segment_tensors[i])
+      output.append(outputs)
+
+      hidden_states = outputs[2]
+      hidden_state.append(hidden_states)
+
+  embeddings = []
+  for i in range(len(hidden_state)):
+    token_vecs = hidden_state[i][-2][0]
+    embedding = torch.mean(token_vecs, dim=0)
+    embeddings.append(embedding)
+
+  return embeddings
 
 if __name__ == '__main__':
     model_name_base = 'baseline_fusion_linout'
     model_name = f'{emotion}_baseline_fusion_linout.chkpt'
     
-       # --- Preprocess
+    # --- Preprocess
     df = pd.read_csv('df.csv')
 
     X = df.drop([emotion], axis = 1)
@@ -205,7 +251,6 @@ if __name__ == '__main__':
     X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True, stratify = y_val)
     df_test = pd.concat([X_test, y_test], axis = 1)
     df_train = pd.concat([X_resampled_text, y_resampled_text], axis = 1)
-    # df_train = pd.concat([X_train, y_train], axis = 1)
     df_train = df_train.sample(frac=1).reset_index(drop=True)
     df_val = pd.concat([X_val, y_val], axis = 1)
 
@@ -248,16 +293,21 @@ if __name__ == '__main__':
         device = torch.device('cuda')
     else:
         device = torch.device('cpu')
+
+        embeddings_train = get_embeddings(df_train_text[:,1], device)
+    embeddings_val = get_embeddings(df_val_text[:,1], device)
+    embeddings_test = get_embeddings(df_test_text[:,1], device)    
+
     # --- Text and EEG
     train_text_eeg = Text_EEGDataset(
-        texts = df_train_text[:,1:],
+        texts = embeddings_train,
         labels = df_train_text[:,0],
         tokenizer = tokenizer,
         max_len = MAX_LEN,
         signals = df_train_eeg[:, 1:]
     )
     val_text_eeg = Text_EEGDataset(
-        texts = df_val_text[:, 1:],
+        texts = embeddings_val,
         labels = df_val_text[:, 0],
         tokenizer = tokenizer,
         max_len = MAX_LEN,
@@ -265,7 +315,7 @@ if __name__ == '__main__':
     )
 
     test_text_eeg = Text_EEGDataset(
-      texts = df_test_text[:, 1:],
+      texts = embeddings_test,
       labels = df_test_text[:, 0],
       tokenizer = tokenizer,
       max_len = MAX_LEN,
@@ -298,27 +348,20 @@ if __name__ == '__main__':
                               num_workers=2,
                               shuffle=True)
     
-    model1 = Transformer(device=device, d_feature=32, d_model=d_model, d_inner=d_inner,
+    model1 = Transformer(device=device, d_feature=768, d_model=d_model, d_inner=d_inner,
                         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-    model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
+    model2 = Transformer2(device=device, d_feature=768, d_model=d_model, d_inner=d_inner,
                         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
     model1 = nn.DataParallel(model1)
     model2 = nn.DataParallel(model2)
-    
-    # chkpt1 = torch.load(torchload, map_location = 'cuda')
-    # chkpt2 = torch.load(torchload2, map_location = 'cuda')
-
-    # model1.load_state_dict(chkpt1['model'])
-    # model2.load_state_dict(chkpt2['model'])
 
 
     model2 = model2.to(device)
     model1 = model1.to(device)
 
-    # model = Fusion(model1, model2, d_model = 16, class_num = class_num).to(device)
   
     model = Fusion(device=device, model1 = model1, model2 = model2,
-    d_feature =6, d_model=d_model, d_inner=d_inner,
+    d_feature =4, d_model=d_model, d_inner=d_inner,
     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num).to(device)
   
 
@@ -336,6 +379,7 @@ if __name__ == '__main__':
     all_labels_val = []
     train_pred = []
     train_label = []
+    epochs = []
     
     for epoch_i in range(epoch):
         print('[ Epoch', epoch_i, ']')
@@ -379,6 +423,18 @@ if __name__ == '__main__':
         print("valid_cm:", valid_cm)
         writer.add_scalar('Accuracy', train_acc, epoch_i)
         writer.add_scalar('Loss', train_loss, epoch_i)
+        epochs.append(epoch_i)
+
+    dic = {}
+
+    dic['train_acc'] = train_accs
+    dic['train_loss'] = train_losses
+    dic['valid_acc'] = valid_accs
+    dic['valid_loss'] = valid_losses
+    dic['epoch'] = epochs
+
+    new_df = pd.DataFrame(dic)
+    new_df.to_csv('baselines/text_eeg_fusion/fusion_acc_loss.csv')
     
     np.savetxt(f'baselines/text_eeg_fusion/{emotion}_{model_name_base}_all_pred_train.txt',train_pred)
     np.savetxt(f'baselines/text_eeg_fusion/{emotion}_{model_name_base}_all_label_train.txt', train_label)
@@ -415,9 +471,6 @@ if __name__ == '__main__':
 
 
     chkpoint = torch.load(test_model_name, map_location='cuda')
-    model = Fusion(device=device, model1 = model1, model2 = model2,
-    d_feature =6, d_model=d_model, d_inner=d_inner,
-    n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num).to(device)
     model.load_state_dict(chkpoint['model'])
     model = model.to(device)
     test_epoch(test_loader_text_eeg, device, model, test_text_eeg.__len__(), test_text_eeg.__len__())

@@ -21,7 +21,7 @@ from roc_new import plot_roc
 from imblearn.over_sampling import SMOTE
 import time
 import os
-from transformers import BertTokenizer
+from transformers import BertTokenizer, BertModel
 from imblearn.over_sampling import RandomOverSampler
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
@@ -32,13 +32,11 @@ tokenizer = BertTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 def cal_loss(pred, pred2, label, device):
 
-    cnt_per_class = np.zeros(2)
 
     loss = F.cross_entropy(pred2, label, reduction='sum')
     pred = pred2.max(1)[1]
     n_correct = pred.eq(label).sum().item()
-    cnt_per_class = [cnt_per_class[j] + pred.eq(j).sum().item() for j in range(class_num)]
-    return loss, n_correct, cnt_per_class
+    return loss, n_correct
 
 
 def cal_statistic(cm):
@@ -65,8 +63,6 @@ def cal_statistic(cm):
 def test_epoch(valid_loader, device, model, total_num):
     all_labels = []
     all_res = []
-    all_pres = []
-    all_recs = []
     all_pred = []
     model.eval()
     total_loss = 0
@@ -81,12 +77,10 @@ def test_epoch(valid_loader, device, model, total_num):
             all_labels.extend(label.cpu().numpy())
             all_res.extend(pred2.max(1)[1].cpu().numpy())
             all_pred.extend(pred2.cpu().numpy())
-            loss, n_correct, cnt = cal_loss(pred, pred2, label, device)
+            loss, n_correct = cal_loss(pred, pred2, label, device)
 
             total_loss += loss.item()
             total_correct += n_correct
-            cnt_per_class += cnt
-
 
     all_pred = np.array(all_pred)
     cm = confusion_matrix(all_labels, all_res)
