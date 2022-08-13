@@ -16,7 +16,6 @@ from model_new import Transformer, Transformer2, DeepCCA, DeepCCA_fusion
 from optim_new import ScheduledOptim
 from dataset_new import Text_EEGDataset
 from config import *
-from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
 import matplotlib.pyplot as plt
 from roc_new import plot_roc
@@ -31,7 +30,6 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 r=0
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
-FL = FocalLoss(class_num=3, gamma=1.5, average=False)
 tokenizer = BertTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 
