@@ -292,9 +292,9 @@ if __name__ == '__main__':
     else:
         device = torch.device('cpu')
 
-    embeddings_train = get_embeddings(df_train_text[:,1])
-    embeddings_val = get_embeddings(df_val_text[:,1])
-    embeddings_test = get_embeddings(df_test_text[:,1])
+    embeddings_train = get_embeddings(df_train_text[:,1], device)
+    embeddings_val = get_embeddings(df_val_text[:,1], device)
+    embeddings_test = get_embeddings(df_test_text[:,1], device)
     
 
     # --- Text and EEG
