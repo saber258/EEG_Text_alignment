@@ -348,7 +348,7 @@ if __name__ == '__main__':
         stride=2,
         groups = 2,
         n_block = 3,
-        n_classes=3)
+        n_classes=2)
 
     model = nn.DataParallel(model)
     model = model.to(device)
