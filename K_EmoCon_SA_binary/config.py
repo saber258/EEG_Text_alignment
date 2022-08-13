@@ -1,13 +1,9 @@
 batch_size = 64
 d_model = 16
-# d_model = 16
-# num_layers = 12
-# num_heads = 12
 num_layers = 1
 num_heads = 2
 class_num = 2
 d_inner = 32
-# d_inner = 32
 dropout = 0.3
 warm_steps = 2000
 fea_num = 7
@@ -17,11 +13,13 @@ KS = 3
 
 Fea_PLUS = 2
 # SIG_LEN = 48
-SIG_LEN = 32
+SIG_LEN = 768
 SIG_LEN2 = 48
 SIG_LEN3 = 4
 MAX_LEN = 32
-PRE_TRAINED_MODEL_NAME = 'j-hartmann/emotion-english-distilroberta-base'
+PRE_TRAINED_MODEL_NAME = 'bert-base-uncased'
+
+# --- pick from [happy_trans, happy2_trans, angry_trans, angry2_trans, sad_trans, sad2_trans, nervous_trans, nervous2_trans]
 emotion = 'sad_trans'
 csv = 'df.csv'
 patient = 'ZAB'
@@ -40,21 +38,9 @@ eeg = [emotion, 'delta0', 'lowAlpha0', 'highAlpha0','lowBeta0','highBeta0', 'low
 #          'delta4_2', 'lowAlpha4_2', 'highAlpha4_2', 'lowBeta4_2', 'highBeta4_2', 'lowGamma4_2', 'middleGamma4_2', 'theta4_2',
 #          'delta5_2', 'lowAlpha5_2', 'highAlpha5_2', 'lowBeta5_2', 'highBeta5_2', 'lowGamma5_2', 'middleGamma5_2', 'theta5_2']
 
-
-
-# torchload = 'baselines/text/0sentiment_baseline_onlytext.chkpt'
-# torchload2 = 'baselines/eeg/0sentiment_baseline_onlyeeg.chkpt'
-
-torchload = 'baselines/text/0sentiment_baseline_onlytext.chkpt'
-torchload2 = 'baselines/eeg/0sentiment_baseline_onlyeeg.chkpt'
-# torchload3 = 'baselines/fusion_cossim/0sentiment_baseline_fusion_cossim_trans.chkpt'
-# torchload3 = 'baselines/fusion_wd/0sentiment_baseline_fusion_wd_trans.chkpt'
-# torchload3 = 'baselines/text_eeg_fusion/0sentiment_baseline_fusion_linout.chkpt'
-# torchload3 = 'baselines/DCCA_fusion/0sentiment_baseline_DCCA_fusion_trans.chkpt'
-torchload3 = 'baselines/DCCA_ds/0sad_trans_baseline_onlyeeg_trans.chkpt'
-# torchload3 = 'baselines/fusion_wd_ds/0sentiment_baseline_fusion_wd_text_trans.chkpt'
-# torchload3 = 'baselines/DCCA_ds/0sentiment_baseline_onlyeeg_trans.chkpt'
 outdim_size = class_num
 use_all_singular_values = False
+
+torchload3 = 'Name of Model (.chkpt)'
 
 

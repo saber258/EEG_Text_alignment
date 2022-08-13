@@ -11,9 +11,9 @@ from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
-from model_new import Transformer, Transformer2, Transformer3
+from model_new import *
 from optim_new import ScheduledOptim
-from dataset_new import EEGDataset, Fusion, Linear, Text_EEGDataset, TextDataset, BalancedBatchSampler
+from dataset_new import Text_EEGDataset
 from config import *
 from FocalLoss import FocalLoss
 from sklearn.model_selection import train_test_split, KFold
@@ -22,15 +22,14 @@ from roc_new import plot_roc
 from imblearn.over_sampling import SMOTE
 import time
 import os
-from transformers import AutoTokenizer
+from transformers import BertTokenizer
 from imblearn.over_sampling import RandomOverSampler
-from CCA import DeepCCA, DeepCCA_fusion, cca_loss
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
 FL = FocalLoss(class_num=2, gamma=1.5, average=False)
-tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
+tokenizer = BertTokenizer.from_pretrained(PRE_TRAINED_MODEL_NAME)
 
 
 def cal_loss(pred, pred2, label, device):
@@ -46,9 +45,7 @@ def cal_loss(pred, pred2, label, device):
 
 def cal_statistic(cm):
     total_pred = cm.sum(0)
-    # print(total_pred)
     total_true = cm.sum(1)
-    # print(total_true)
 
     acc_SP = sum([cm[i, i] for i in range(1, class_num)]) / total_pred[1: class_num].sum()
     pre_i = [cm[i, i] / total_pred[i] for i in range(class_num)]
@@ -94,15 +91,9 @@ def test_epoch(valid_loader, device, model, total_num):
 
 
     all_pred = np.array(all_pred)
-    # plot_roc(all_labels,all_pred)
     cm = confusion_matrix(all_labels, all_res)
     print("test_cm:", cm)
     acc_SP, pre_i, rec_i, F1_i = cal_statistic(cm)
-    # print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP+.4))
-    # print('pre_i is : {pre_i}'.format(pre_i=pre_i+.4))
-    # print('rec_i is : {rec_i}'.format(rec_i=rec_i+.4))
-    # print('F1_i is : {F1_i}'.format(F1_i=F1_i+.4))
-    # test_acc = (total_correct / total_num) +.4
     print('acc_SP is : {acc_SP}'.format(acc_SP=acc_SP))
     print('pre_i is : {pre_i}'.format(pre_i=pre_i))
     print('rec_i is : {rec_i}'.format(rec_i=rec_i))
@@ -110,10 +101,67 @@ def test_epoch(valid_loader, device, model, total_num):
     test_acc = (total_correct / total_num) 
     print('test_acc is : {test_acc}'.format(test_acc=test_acc))
 
+def get_embeddings(df, device):
+  words = df
+  
+  marked_texts = []
+  
+  for i in words:
+    marked_text = "[CLS] " + i + " [SEP]"
+    marked_texts.append(marked_text)
+
+  tokenized = []
+  for i in marked_texts:
+    tokenized_text = tokenizer.tokenize(i)
+    tokenized.append(tokenized_text)
+
+  index_token = []
+
+  for i in tokenized:
+    index_token.append(tokenizer.convert_tokens_to_ids(i))
+  
+  segments = []
+
+  for i in tokenized:
+    segments.append([1] * len(i))
+
+  tokens_tensors = []
+  for i in index_token:
+    tokens_tensor = torch.tensor([i])
+    tokens_tensors.append(tokens_tensor)
+
+  segment_tensors = []
+  for i in segments:
+    segments_tensors = torch.tensor([i])
+    segment_tensors.append(segments_tensors)
+
+  model = BertModel.from_pretrained('bert-base-uncased',
+                                  output_hidden_states = True, 
+                                  ).to(device)
+
+  model.eval()
+
+  output = []
+  hidden_state = []
+  for i in range(len(tokens_tensors)):
+
+    with torch.no_grad():
+
+      outputs = model(tokens_tensors[i], segment_tensors[i])
+      output.append(outputs)
+
+      hidden_states = outputs[2]
+      hidden_state.append(hidden_states)
+
+  embeddings = []
+  for i in range(len(hidden_state)):
+    token_vecs = hidden_state[i][-2][0]
+    embedding = torch.mean(token_vecs, dim=0)
+    embeddings.append(embedding)
+
+  return embeddings
 
 if __name__ == '__main__':
-    model_name_base = 'baseline_onlyeeg'
-    model_name = f'{emotion}_baseline_onlyeeg.chkpt'
     
     # --- Preprocess
     df = pd.read_csv('df.csv')
@@ -130,7 +178,6 @@ if __name__ == '__main__':
     X_val, X_test, y_val, y_test = train_test_split(X_val, y_val, random_state= 2, test_size = 0.5, shuffle = True, stratify = y_val)
     df_test = pd.concat([X_test, y_test], axis = 1)
     df_train = pd.concat([X_resampled_text, y_resampled_text], axis = 1)
-    # df_train = pd.concat([X_train, y_train], axis = 1)
     df_train = df_train.sample(frac=1).reset_index(drop=True)
     df_val = pd.concat([X_val, y_val], axis = 1)
 
@@ -173,16 +220,21 @@ if __name__ == '__main__':
         else:
             device = torch.device('cpu')
 
+        embeddings_train = get_embeddings(df_train_text[:,1])
+        embeddings_val = get_embeddings(df_val_text[:,1])
+        embeddings_test = get_embeddings(df_test_text[:,1])
+        
+
         # --- Text and EEG
         train_text_eeg = Text_EEGDataset(
-            texts = df_train_text[:,1:],
+            texts = embeddings_train,
             labels = df_train_text[:,0],
             tokenizer = tokenizer,
             max_len = MAX_LEN,
             signals = df_train_eeg[:, 1:]
         )
         val_text_eeg = Text_EEGDataset(
-            texts = df_val_text[:, 1:],
+            texts = embeddings_val,
             labels = df_val_text[:, 0],
             tokenizer = tokenizer,
             max_len = MAX_LEN,
@@ -190,11 +242,11 @@ if __name__ == '__main__':
         )
 
         test_text_eeg = Text_EEGDataset(
-          texts = df_test_text[:, 1:],
-          labels = df_test_text[:, 0],
-          tokenizer = tokenizer,
-          max_len = MAX_LEN,
-          signals = df_test_eeg[:, 1:]
+        texts = embeddings_test,
+        labels = df_test_text[:, 0],
+        tokenizer = tokenizer,
+        max_len = MAX_LEN,
+        signals = df_test_eeg[:, 1:]
 
         )
         
@@ -206,8 +258,6 @@ if __name__ == '__main__':
         samples_weight = torch.from_numpy(samples_weight)
         samples_weight = samples_weight.double()
         sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
-
-    
 
         # --- Loader
         train_loader_text_eeg = DataLoader(dataset=train_text_eeg,
@@ -230,19 +280,19 @@ if __name__ == '__main__':
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
         model2 = Transformer2(device=device, d_feature=48, d_model=d_model, d_inner=d_inner,
                             n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
-        
-        # model1 = Linear(device, d_feature=32, class_num = 3)
-        # model2 = Linear(device, d_feature = 839, class_num=3)
+    
 
         model1 = nn.DataParallel(model1)
         model2 = nn.DataParallel(model2)
         
         model1 = model1.to(device)
         model2 = model2.to(device)
+
+        # --- Choose a model to evaluate
         
-        model = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
-        # 
-        # model = Fusion(model1, model2).to(device)
+        #model = DeepCCA(model1, model2, outdim_size, use_all_singular_values).to(device)
+
+        # model = CAM(model1, model2).to(device)
 
         # model = Fusion(device=device, model1 = model1, model2 = model2,
         # d_feature =6, d_model=d_model, d_inner=d_inner,
