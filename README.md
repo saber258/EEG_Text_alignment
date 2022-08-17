@@ -1,3 +1,3 @@
-# CMU SAIL
+## An Empirical Exploration of Cross-domain Alignment between Language and Electroencephalogram
 
-Multimodal learning classifcation model to accurately identify psycholopathologies. 
+William Han*, Jielin Qiu*, Jiacheng Zhu, Mengdi Xu, Douglas Weber, Bo Li, Ding Zhao
