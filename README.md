@@ -3,6 +3,9 @@ William Han<sup>*</sup>, [Jielin Qiu<sup>*</sup>](https://www.cs.cmu.edu/~jielin
 
 Under Review / [arxiv](https://arxiv.org/abs/2208.06348)
 
+
+# Usage
+
 ### Set up Environment
 
 Create a virtual environment and activate it. 
@@ -19,6 +22,7 @@ Install basic requirements.
 pip install -r requirements.txt
 ```
 
+Please 
 
 
 
