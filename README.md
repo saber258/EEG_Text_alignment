@@ -1,3 +1,3 @@
 ### An Empirical Exploration of Cross-domain Alignment between Language and Electroencephalogram
-
-William Han*, Jielin Qiu*, Jiacheng Zhu, Mengdi Xu, Douglas Weber, Bo Li, Ding Zhao
+William Han<sup>*</sup>, [Jielin Qiu<sup>*</sup>](https://www.cs.cmu.edu/~jielinq/){:target="_blank"}, [Jiacheng Zhu](https://jiachengzhuml.github.io/){:target="_blank"}, [Mengdi Xu](https://mxu34.github.io/){:target="_blank"}, [Douglas Weber](https://www.meche.engineering.cmu.edu/directory/bios/weber-douglas.html){:target="_blank"}, [Bo Li](https://aisecure.github.io/){:target="_blank"}, [Ding Zhao](https://safeai-lab.github.io/){:target="_blank"}
+Under Review / [arxiv](https://arxiv.org/abs/2208.06348){:target="_blank"}
