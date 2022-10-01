@@ -400,6 +400,7 @@ class MLP2(nn.Module):
 class MyConv1dPadSame(nn.Module):
     """
     extend nn.Conv1d to support SAME padding
+    https://github.com/hsd1503/resnet1d
     """
     def __init__(self, in_channels, out_channels, kernel_size, stride, groups=1):
         super(MyConv1dPadSame, self).__init__()
@@ -433,6 +434,7 @@ class MyConv1dPadSame(nn.Module):
 class MyMaxPool1dPadSame(nn.Module):
     """
     extend nn.MaxPool1d to support SAME padding
+    https://github.com/hsd1503/resnet1d
     """
     def __init__(self, kernel_size):
         super(MyMaxPool1dPadSame, self).__init__()
@@ -458,6 +460,7 @@ class MyMaxPool1dPadSame(nn.Module):
 class BasicBlock(nn.Module):
     """
     ResNet Basic Block
+    https://github.com/hsd1503/resnet1d
     """
     def __init__(self, in_channels, out_channels, kernel_size, stride, groups, downsample, use_bn, use_do, is_first_block=False):
         super(BasicBlock, self).__init__()
@@ -533,7 +536,9 @@ class BasicBlock(nn.Module):
         return out
     
 class ResNet1D(nn.Module):
-
+    '''
+    https://github.com/hsd1503/resnet1d
+    '''
     def __init__(self, in_channels, base_filters, kernel_size, stride, groups, n_block, n_classes, downsample_gap=2, increasefilter_gap=4, use_bn=True, use_do=True, verbose=False):
         super(ResNet1D, self).__init__()
         
