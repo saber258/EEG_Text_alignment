@@ -3,6 +3,7 @@ import torch.nn as nn
 from block_new import get_sinusoid_encoding_table, get_attn_key_pad_mask, get_non_pad_mask, \
     get_subsequent_mask, EncoderLayer, EncoderLayer2, EncoderLayer3
 from config import PAD, KS, Fea_PLUS
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torch.nn.functional as F
 from CCA import cca_loss
 from torch.nn.modules.batchnorm import BatchNorm1d
@@ -340,8 +341,10 @@ class BiLSTM(nn.Module):
         src_pos = src_pos.to(self.device)
 
         embedded = self.embedding(src_pos)
+        
+        packed_embedded = pack_padded_sequence(embedded, text_lengths, batch_first=True)
 
-        packed_output, (hidden, cell) = self.lstm(text)
+        packed_output, (hidden, cell) = self.lstm(packed_embedded)
 
         rel = self.relu(packed_output)
         dense1 = self.fc1(rel)
