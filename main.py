@@ -32,7 +32,7 @@ import argparse
 
 def get_args():
     parser = argparse.ArgumentParser(description=None)
-    parser.add_argument('--model', type=str, help="Please choose a model from the following list: ['transformer', 'biLSTM', 'MLP', 'resnet', 'fusion', 'CCA_fusion', 'CCA_ds', 'WD_fusion', 'WD_ds']")
+    parser.add_argument('--model', type=str, help="Please choose a model from the following list: ['transformer', 'biLSTM', 'MLP', 'resnet', 'fusion', 'CCA_fusion', 'CCA_ds', 'WD_fusion', 'WD_ds', 'WD_CCA_fusion', 'WD_CCA_ds']")
     parser.add_argument('--modality', type = str, default = None, help="Please choose a modality from the following list: ['eeg', 'text', fusion]")
     parser.add_argument('--dataset', type=str, help="Please choose a dataset from the following list: ['KEmoCon', 'ZuCo']")
     parser.add_argument('--task', default ='SA', type=str, help="If dataset == Zuco, please choose a task from the following list: ['SA', 'RD']")
@@ -77,6 +77,22 @@ def cal_loss(label, device, args, pred = None, pred2 = None, out = None ):
         out = out.max(1)[1]
     
         n_correct = out.eq(label).sum().item()
+        return loss, n_correct
+    
+   if (args.model == 'WD_CCA_fusion'):
+        loss1 = F.cross_entropy(out, label, reduction='sum')
+
+        loss2 = wasserstein_distance(pred.cpu().detach().numpy().flatten(), 
+        pred2.cpu().detach().numpy().flatten())
+        loss2 = torch.tensor(loss2, requires_grad=True)
+        
+        loss3 = model1.loss
+        loss3 = loss3(pred, pred2)
+        
+        loss = loss1 + loss2 + loss3
+        pred = out.max(1)[1]
+        n_correct = out.eq(label).sum().item()
+        
         return loss, n_correct
     
     if (args.model == 'CCA_ds') and (args.modality == 'text'):
@@ -129,6 +145,38 @@ def cal_loss(label, device, args, pred = None, pred2 = None, out = None ):
 
         n_correct = pred2.eq(label).sum().item()
 
+        return loss, n_correct
+    
+    if (args.model == 'WD_CCA_ds') and (args.modality == 'eeg'):
+        loss1 = F.cross_entropy(pred2, label, reduction='sum')
+
+        loss2 = wasserstein_distance(pred.cpu().detach().numpy().flatten(), 
+        pred2.cpu().detach().numpy().flatten())
+        loss2 = torch.tensor(loss2, requires_grad=True)
+        
+        loss3 = model1.loss
+        loss3 = loss3(pred, pred2)
+        
+        loss = loss1 + loss2 + loss3
+        pred = pred2.max(1)[1]
+        n_correct = pred2.eq(label).sum().item()
+        
+        return loss, n_correct
+    
+    if (args.model == 'WD_CCA_ds') and (args.modality == 'text'):
+        loss1 = F.cross_entropy(pred, label, reduction='sum')
+
+        loss2 = wasserstein_distance(pred.cpu().detach().numpy().flatten(), 
+        pred2.cpu().detach().numpy().flatten())
+        loss2 = torch.tensor(loss2, requires_grad=True)
+        
+        loss3 = model1.loss
+        loss3 = loss3(pred, pred2)
+        
+        loss = loss1 + loss2 + loss3
+        pred = pred.max(1)[1]
+        n_correct = pred.eq(label).sum().item()
+        
         return loss, n_correct
 
 
@@ -227,7 +275,7 @@ def train_fusion(train_loader, device, model, optimizer, total_num, args):
             
             cm = confusion_matrix(all_labels, all_res)
 
-        if (args.model == 'CCA_fusion') or (args.model == 'WD_fusion'):
+        if (args.model == 'CCA_fusion') or (args.model == 'WD_fusion') or (args.model == 'WD_CCA_fusion'):
 
             out, pred, pred2 = model(sig1, sig2)
             all_labels.extend(label1.cpu().numpy())
@@ -360,7 +408,7 @@ def eval_fusion(valid_loader1, device, model, total_num, args):
             total_loss += loss.item()
             total_correct += (n_correct1)
 
-        if (args.model == 'CCA fusion') or (args.model == 'WD fusion'):
+        if (args.model == 'CCA fusion') or (args.model == 'WD fusion') or (args.model == 'WD_CCA_fusion'):
 
             out, pred, pred2 = model(sig1, sig2)
             all_labels.extend(label1.cpu().numpy())
@@ -491,7 +539,7 @@ def test_fusion(test_loader, device, model, total_num, args):
             total_loss += loss.item()
             total_correct += (n_correct1)
     
-        if (args.model == 'CCA fusion') or (args.model == 'WD fusion'):
+        if (args.model == 'CCA fusion') or (args.model == 'WD fusion') or (args.model == 'WD_CCA_fusion'):
             out, pred, pred2 = model(sig1, sig2)  
             all_labels.extend(label1.cpu().numpy())
             all_res.extend(out.max(1)[1].cpu().numpy())
@@ -682,7 +730,7 @@ if __name__ == "__main__":
                 model = Transformer2(device=device, d_feature=SIG_LEN2, d_model=d_model, d_inner=d_inner,
                         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
             
-        if (args.model == 'fusion') or (args.model == 'WD_fusion') or (args.model == 'CCA_fusion'):
+        if (args.model == 'fusion') or (args.model == 'WD_fusion') or (args.model == 'CCA_fusion') or (args.model == 'WD_CCA_fusion'):
 
             model1 = Transformer(device=device, d_feature=SIG_LEN, d_model=d_model, d_inner=d_inner,
                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
@@ -695,7 +743,7 @@ if __name__ == "__main__":
             model = Fusion(device=device, model1 = model1, model2 = model2, outdim_size=outdim_size, 
             use_all_singular_values=use_all_singular_values, class_num=class_num).to(device) 
 
-        if (args.model == 'WD_ds') or (args.model == 'CCA_ds'):
+        if (args.model == 'WD_ds') or (args.model == 'CCA_ds') or (args.model == 'WD_CCA_ds):
 
             model1 = Transformer(device=device, d_feature=SIG_LEN, d_model=d_model, d_inner=d_inner,
                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
@@ -854,7 +902,7 @@ if __name__ == "__main__":
                 model = Transformer2(device=device, d_feature=SIG_LEN2, d_model=d_model, d_inner=d_inner,
                         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
             
-        if (args.model == 'fusion') or (args.model == 'WD_fusion') or (args.model == 'CCA_fusion'):
+        if (args.model == 'fusion') or (args.model == 'WD_fusion') or (args.model == 'CCA_fusion') (args.model == 'WD_CCA_fusion'):
 
             model1 = Transformer(device=device, d_feature=SIG_LEN, d_model=d_model, d_inner=d_inner,
                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
@@ -867,7 +915,7 @@ if __name__ == "__main__":
             model = Fusion(device=device, model1 = model1, model2 = model2, outdim_size=outdim_size, 
             use_all_singular_values=use_all_singular_values, class_num=class_num).to(device) 
 
-        if (args.model == 'WD_ds') or (args.model == 'CCA_ds'):
+        if (args.model == 'WD_ds') or (args.model == 'CCA_ds'): or (args.model=='WD_CCA_ds'):
 
             model1 = Transformer(device=device, d_feature=SIG_LEN, d_model=d_model, d_inner=d_inner,
                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
@@ -1026,7 +1074,7 @@ if __name__ == "__main__":
                 model = Transformer2(device=device, d_feature=SIG_LEN2, d_model=d_model, d_inner=d_inner,
                         n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
             
-        if (args.model == 'fusion') or (args.model == 'WD_fusion') or (args.model == 'CCA_fusion'):
+        if (args.model == 'fusion') or (args.model == 'WD_fusion') or (args.model == 'CCA_fusion') or (args.model == 'WD_CCA_fusion'):
 
             model1 = Transformer(device=device, d_feature=SIG_LEN, d_model=d_model, d_inner=d_inner,
                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
@@ -1039,7 +1087,7 @@ if __name__ == "__main__":
             model = Fusion(device=device, model1 = model1, model2 = model2, outdim_size=outdim_size, 
             use_all_singular_values=use_all_singular_values, class_num=class_num).to(device) 
 
-        if (args.model == 'WD_ds') or (args.model == 'CCA_ds'):
+        if (args.model == 'WD_ds') or (args.model == 'CCA_ds') or (args.model == 'WD_CCA_ds'):
 
             model1 = Transformer(device=device, d_feature=SIG_LEN, d_model=d_model, d_inner=d_inner,
                     n_layers=num_layers, n_head=num_heads, d_k=64, d_v=64, dropout=dropout, class_num=class_num)
@@ -1101,10 +1149,10 @@ if __name__ == "__main__":
         if (args.model == 'transformer') or (args.model == 'biLSTM') or (args.model == 'MLP') or (args.model == 'resnet'):
             train_loss, train_acc, train_cm, all_pred_train, all_label_train = train_raw(train_loader_text_eeg, device, model, optimizer, train_text_eeg.__len__(), args)
 
-        if (args.model == 'fusion') or (args.model == 'CCA_fusion') or (args.model == 'WD_fusion'):
+        if (args.model == 'fusion') or (args.model == 'CCA_fusion') or (args.model == 'WD_fusion') or (args.model == 'WD_CCA_fusion'):
             train_loss, train_acc, train_cm, all_pred_train, all_label_train = train_fusion(train_loader_text_eeg, device, model, optimizer, train_text_eeg.__len__(), args)
 
-        if (args.model == 'WD_ds') or (args.model == 'CCA_cs'):
+        if (args.model == 'WD_ds') or (args.model == 'CCA_ds') or (args.model == 'WD_CCA_ds'):
             train_loss, train_acc, train_cm, all_pred_train, all_label_train = train_alignment_ds(train_loader_text_eeg, device, model, optimizer,train_text_eeg.__len__(), args)
 
         all_pred_train1.extend(all_pred_train)
@@ -1116,10 +1164,10 @@ if __name__ == "__main__":
         if (args.model == 'transformer') or (args.model == 'biLSTM') or (args.model == 'MLP') or (args.model == 'resnet'):
             valid_loss, valid_acc, valid_cm, eva_indi, all_pred_val, all_label_val = eval_raw(valid_loader_text_eeg, device, model, train_text_eeg.__len__(), args)
 
-        if (args.model == 'fusion') or (args.model == 'CCA_fusion') or (args.model == 'WD_fusion'):
+        if (args.model == 'fusion') or (args.model == 'CCA_fusion') or (args.model == 'WD_fusion') or (args.model == 'WD_CCA_fusion'):
             valid_loss, valid_acc, valid_cm, eva_indi, all_pred_val, all_label_val  = eval_fusion(valid_loader_text_eeg, device, model, train_text_eeg.__len__(), args)
 
-        if (args.model == 'WD_ds') or (args.model == 'CCA_cs'):
+        if (args.model == 'WD_ds') or (args.model == 'CCA_ds') or (args.model == 'WD_CCA_ds'):
             valid_loss, valid_acc, valid_cm, eva_indi, all_pred_val, all_label_val = eval_alignment_ds(valid_loader_text_eeg, device, model, train_text_eeg.__len__(), args)
 
         all_pred_val1.extend(all_pred_val)
@@ -1199,9 +1247,9 @@ if __name__ == "__main__":
     model = model.to(device)
     if (args.model == 'transformer') or (args.model == 'biLSTM') or (args.model == 'MLP') or (args.model == 'resnet'):
         test_raw(test_loader_text_eeg, device, model, test_text_eeg.__len__(), args)
-    if (args.model == 'fusion') or (args.model == 'CCA_fusion') or (args.model == 'WD_fusion'):
+    if (args.model == 'fusion') or (args.model == 'CCA_fusion') or (args.model == 'WD_fusion') or (args.model == 'WD_CCA_fusion'):
         test_fusion(test_loader_text_eeg, device, model, test_text_eeg.__len__(), args)
-    if (args.model == 'WD_ds') or (args.model == 'CCA_cs'):
+    if (args.model == 'WD_ds') or (args.model == 'CCA_ds') or (args.model == 'WD_CCA_ds'):
         test_alignment_ds(test_loader_text_eeg, device, model, test_text_eeg.__len__(), args)
 
 writer.close()
